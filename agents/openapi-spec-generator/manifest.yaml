@@ -1,0 +1,60 @@
+name: openapi-spec-generator
+display_name: "OpenAPI Spec Generator"
+description: "Scans a repository path and generates an OpenAPI 3.1 specification as YAML."
+version: "1.0.0"
+
+agent:
+  object: agent.version
+  kind: prompt
+  model: gpt-5.1-codex-mini
+  reasoning:
+    effort: medium
+
+structured_inputs:
+  repository:
+    type: string
+    description: "GitHub repository to scan, for example TalentConsulting/example-api"
+    default: "TalentConsulting/example-api"
+  scanPath:
+    type: string
+    description: "File or directory path to scan within the repository, for example src/My.Api"
+    default: "."
+  openApiTitle:
+    type: string
+    description: "Title to use in the generated OpenAPI specification"
+    default: "Generated API"
+  openApiVersion:
+    type: string
+    description: "Version to use in the generated OpenAPI specification"
+    default: "1.0.0"
+
+outputs:
+  type: json_schema
+  json_schema:
+    name: openapi_spec_output
+    strict: true
+    schema:
+      type: object
+      properties:
+        fileName:
+          type: string
+          description: "Suggested output filename for the generated OpenAPI YAML file."
+        contentType:
+          type: string
+          enum:
+            - "application/yaml"
+        yaml:
+          type: string
+          description: "Complete OpenAPI specification in YAML format."
+      required:
+        - fileName
+        - contentType
+        - yaml
+      additionalProperties: false
+
+files:
+  instructions: instructions.md
+  tools: tools.yaml
+  guardrails: guardrails.md
+  evaluations: evaluations.md
+  release_notes: release-notes.md

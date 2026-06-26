@@ -1,0 +1,22 @@
+tools:
+  - type: mcp
+    server_label: GitHub
+    server_url: https://api.githubcopilot.com/mcp
+    require_approval: never
+    project_connection_id: GitHub
+
+tool_usage:
+  github:
+    purpose: "Read repository files and source code to identify API endpoints and models."
+    allowed_operations:
+      - "Read repository contents"
+      - "Read files"
+      - "Search repository code"
+      - "Read commit metadata"
+    disallowed_operations:
+      - "Create, update, or delete files"
+      - "Create, update, or delete branches"
+      - "Create pull requests"
+      - "Merge pull requests"
+      - "Modify repository settings"
+      - "Trigger deployments"

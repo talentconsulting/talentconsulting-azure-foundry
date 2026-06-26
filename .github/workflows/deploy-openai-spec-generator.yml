@@ -1,14 +1,14 @@
-name: Deploy Repository Change Detector
+name: Deploy OpenAPI Spec Generator
 
 on:
   push:
     branches:
       - main
     paths:
-      - "agents/repository-change-detector/**"
+      - "agents/openapi-spec-generator/**"
       - "scripts/deploy-agent.py"
       - "requirements-agent-deploy.txt"
-      - ".github/workflows/deploy-repository-change-detector.yml"
+      - ".github/workflows/deploy-openapi-spec-generator.yml"
 
   workflow_dispatch:
 
@@ -37,8 +37,8 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-agent-deploy.txt
 
-      - name: Deploy Repository Change Detector
+      - name: Deploy OpenAPI Spec Generator
         run: |
-          python scripts/deploy-agent.py --agent-dir agents/repository-change-detector
+          python scripts/deploy-agent.py --agent-dir agents/openapi-spec-generator
         env:
           AZURE_AI_PROJECT_ENDPOINT: ${{ secrets.AZURE_AI_PROJECT_ENDPOINT }}

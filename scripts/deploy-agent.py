@@ -98,13 +98,26 @@ def main() -> None:
         )
         print(f"Updated agent: {updated_agent.id}")
     else:
-        created_agent = project.agents.create_agent(
-            model=model,
-            name=agent_name,
-            instructions=instructions,
-            tools=tools,
-            response_format=response_format,
+        definition = {
+            "kind": "prompt",
+            "model": model,
+            "instructions": instructions,
+            "tools": tools,
+            "response_format": response_format,
+        }
+
+        created_agent = project.agents.create_version(
+            agent_name=agent_name,
+            definition=definition,
+            description=manifest.get("description"),
+            metadata={
+                "version": manifest.get("version", "1.0.0"),
+                "display_name": manifest.get("display_name", agent_name),
+            },
         )
+
+        print(f"Created agent version: {created_agent}")
+
         if existing_agent:
             print(f"Created new agent because update_agent is not available in this SDK version: {created_agent.id}")
         else:
