@@ -1,94 +1,124 @@
 # AI Source Control Template
 
-This repository is a template for storing AI workflows, agents, prompts, evaluations, model configuration, risk records, and governance evidence in source control.
+This repository is a source-control example for storing, reviewing, and deploying AI agents and related governance evidence.
 
-Use it as the canonical implementation pattern linked from AI governance standards, delivery playbooks, and assurance documentation.
+The current template contains one deployable Azure AI Foundry agent: `repository-change-detector`. The agent identifies repositories where a manifest entry is missing `latestCommit` or where `latestCommit` is out of date compared with GitHub.
 
-## Purpose
-
-AI systems change through prompts, orchestration logic, model choices, tools, datasets, policies, and evaluation criteria. Those changes should be reviewed, versioned, tested, and auditable in the same way as application code.
-
-This template helps teams:
-
-- Keep AI assets discoverable and owned.
-- Review changes before release.
-- Preserve evidence for governance, audit, and operational support.
-- Separate reusable prompts, agents, workflows, and evaluations.
-- Track model, data, tool, and policy dependencies.
-
-## Repository Layout
+## Repository Structure
 
 ```text
 .
-├── agents/                 # Agent definitions, tool access, instructions, guardrails
-├── workflows/              # AI workflow designs and orchestration specs
-├── prompts/                # Reusable prompt templates and prompt change history
-├── evaluations/            # Test sets, scoring criteria, evaluation runs
-├── datasets/               # Dataset cards and small sample datasets
-├── models/                 # Model cards, deployment settings, model selection records
-├── tools/                  # Tool and connector contracts exposed to agents/workflows
-├── policies/               # Safety, privacy, security, and usage policies
-├── risks/                  # AI risk assessments and mitigations
-├── decisions/              # Architecture and governance decision records
-├── docs/                   # Standards-facing documentation and operating model
-├── examples/               # Worked examples teams can copy from
-└── schemas/                # Lightweight metadata schemas for repository assets
+├── .env.example
+├── .github/
+│   └── workflows/
+│       └── deploy-repository-change-detector.yml
+├── agents/
+│   └── repository-change-detector/
+│       ├── evaluations.md
+│       ├── guardrails.md
+│       ├── instructions.md
+│       ├── manifest.yaml
+│       ├── release-notes.md
+│       └── tools.yaml
+├── scripts/
+│   └── deploy-agent.py
+├── CODEOWNERS
+├── CONTRIBUTING.md
+├── DEPLOYMENT.md
+├── README.md
+└── requirements-agent-deploy.txt
 ```
 
-## Minimum Standard For Any AI Asset
+## What Each Area Contains
 
-Every committed AI asset should include:
+| Path | Purpose |
+| --- | --- |
+| `.github/workflows/` | GitHub Actions workflow for deploying the agent. |
+| `agents/repository-change-detector/manifest.yaml` | Agent metadata, model configuration, inputs, outputs, and file references. |
+| `agents/repository-change-detector/instructions.md` | Core task instructions for the agent. |
+| `agents/repository-change-detector/tools.yaml` | Tool definitions and permissions used by the agent. |
+| `agents/repository-change-detector/guardrails.md` | Read-only, data-access, output, and failure-behaviour controls. |
+| `agents/repository-change-detector/evaluations.md` | Governance and quality checks for expected behaviour. |
+| `agents/repository-change-detector/release-notes.md` | Release history and operational notes. |
+| `scripts/deploy-agent.py` | Deployment script that assembles the split agent files and deploys to Azure AI Foundry. |
+| `requirements-agent-deploy.txt` | Python dependencies for local and CI deployment. |
+| `DEPLOYMENT.md` | Deployment setup, GitHub Actions secrets, and local deployment commands. |
+| `CONTRIBUTING.md` | Change-control, review, versioning, release, and retirement guidance. |
+| `CODEOWNERS` | Default ownership rules for repository review. |
 
-- Owner and accountable team.
-- Business purpose and user group.
-- Version and change summary.
-- Model or service dependency.
-- Data inputs and data classification.
-- Tool access and permissions.
-- Evaluation approach and acceptance criteria.
-- Known risks, mitigations, and escalation path.
-- Release status: `draft`, `review`, `approved`, `released`, or `retired`.
+## Agent Source Pattern
 
-## Recommended Change Flow
+Each agent should live under `agents/<agent-name>/` and keep deployable behaviour separate from governance evidence:
 
-1. Create or update the asset in the relevant folder.
-2. Update metadata, evaluation criteria, and risk notes.
-3. Run the relevant evaluations or document why they are not required.
-4. Raise a pull request with the governance checklist completed.
-5. Obtain review from engineering, product owner, and risk/compliance where required.
-6. Tag or release approved versions used in production.
+```text
+agents/<agent-name>/
+├── manifest.yaml       # Required deployment metadata
+├── instructions.md     # Required runtime instructions
+├── tools.yaml          # Required tool definitions
+├── guardrails.md       # Required safety and operating controls
+├── evaluations.md      # Required test and review evidence
+└── release-notes.md    # Required release history
+```
 
-## Quick Start
+This keeps AI behaviour reviewable in pull requests and gives governance standards a stable place to reference approved instructions, tools, evaluations, and release evidence.
 
-Copy one of the examples:
+## Local Deployment
 
-- [Example support triage agent](examples/support-triage-agent/)
-- [Example document summarisation workflow](examples/document-summarisation-workflow/)
+Install dependencies:
 
-Then complete:
+```bash
+pip install -r requirements-agent-deploy.txt
+```
 
-- [Agent manifest template](templates/agent-manifest.yaml)
-- [Workflow manifest template](templates/workflow-manifest.yaml)
-- [Prompt template](templates/prompt-template.md)
-- [Evaluation plan template](templates/evaluation-plan.md)
-- [Risk assessment template](templates/risk-assessment.md)
+Set the Azure AI Foundry project endpoint:
 
-## Governance Linkage
+```bash
+export AZURE_AI_PROJECT_ENDPOINT="https://<your-ai-service>.services.ai.azure.com/api/projects/<your-project>"
+```
 
-This repository is designed to support governance standards covering:
+Deploy the agent:
 
-- AI asset inventory.
-- Prompt and agent change management.
-- Human oversight.
-- Model and dataset traceability.
-- Evaluation and acceptance evidence.
-- Safety, privacy, and security controls.
-- Operational monitoring and retirement.
+```bash
+python scripts/deploy-agent.py --agent-dir agents/repository-change-detector
+```
 
-See [docs/governance-source-control-standard.md](docs/governance-source-control-standard.md) for suggested wording to link from your standards documentation.
+Force creation of a new agent or version:
 
-For a stable standards link target, use [docs/repository-index.md](docs/repository-index.md).
+```bash
+python scripts/deploy-agent.py --agent-dir agents/repository-change-detector --create-new-version
+```
 
-## Contributing
+## GitHub Actions Deployment
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the recommended branch, review, versioning, release, and retirement process.
+The workflow is stored at:
+
+```text
+.github/workflows/deploy-repository-change-detector.yml
+```
+
+Required repository secrets:
+
+| Secret | Description |
+| --- | --- |
+| `AZURE_CLIENT_ID` | Federated identity app/client ID used by GitHub Actions. |
+| `AZURE_TENANT_ID` | Azure tenant ID. |
+| `AZURE_SUBSCRIPTION_ID` | Azure subscription ID. |
+| `AZURE_AI_PROJECT_ENDPOINT` | Azure AI Foundry project endpoint. |
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the full deployment guide.
+
+## Governance Use
+
+This repository is intended to be linked from AI governance standards as an example of how to source-control AI assets.
+
+It demonstrates:
+
+- Versioned agent instructions.
+- Explicit model and output-schema configuration.
+- Tool access and permission documentation.
+- Read-only guardrails and failure behaviour.
+- Evaluation scenarios and acceptance checks.
+- Deployment automation through source-controlled scripts and workflows.
+- Release notes and ownership through `CODEOWNERS`.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the recommended review and change-control process.
