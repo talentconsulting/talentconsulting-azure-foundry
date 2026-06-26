@@ -1,0 +1,35 @@
+schema_version: 1
+asset_type: agent
+id: support-triage-agent
+name: Support Triage Agent
+version: 0.1.0
+status: draft
+owner:
+  team: Customer Operations
+  accountable_person: TBD
+purpose: Classify incoming support requests, suggest priority, and draft a routing note for human review.
+model:
+  provider: Example AI Provider
+  deployment: customer-ops-standard
+  version: TBD
+data:
+  input_classification: confidential
+  output_classification: internal
+  prohibited_inputs:
+    - payment card data
+    - credentials
+tools:
+  - name: ticket-search
+    permission_scope: read-only
+guardrails:
+  policy_refs:
+    - policies/ai-usage-policy.md
+evaluations:
+  plan: examples/support-triage-agent/evaluation-plan.md
+  acceptance_criteria: At least 90 percent routing accuracy on approved test cases, with zero critical policy failures.
+risks:
+  assessment: examples/support-triage-agent/risk-assessment.md
+release:
+  approved_by: []
+  rollback: Disable the agent route and revert to manual triage queue.
+

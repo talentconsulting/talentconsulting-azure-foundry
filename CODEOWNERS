@@ -1,0 +1,9 @@
+# Adjust ownership to match your organisation.
+* @ai-platform-team
+
+/policies/ @ai-governance-team
+/risks/ @ai-governance-team
+/evaluations/ @ai-quality-team
+/models/ @ai-platform-team
+/tools/ @security-team
+

@@ -1,0 +1,35 @@
+schema_version: 1
+asset_type: agent
+id: example-agent
+name: Example Agent
+version: 0.1.0
+status: draft
+owner:
+  team: Example Team
+  accountable_person: TBD
+purpose: Describe the business purpose and intended users.
+model:
+  provider: TBD
+  deployment: TBD
+  version: TBD
+data:
+  input_classification: internal
+  output_classification: internal
+  prohibited_inputs:
+    - secrets
+    - payment card data
+tools:
+  - name: example-tool
+    permission_scope: read-only
+guardrails:
+  policy_refs:
+    - policies/ai-usage-policy.md
+evaluations:
+  plan: evaluations/plans/example-agent.md
+  acceptance_criteria: Define measurable release criteria.
+risks:
+  assessment: risks/assessments/example-agent.md
+release:
+  approved_by: []
+  rollback: Describe how to revert to the last approved version.
+

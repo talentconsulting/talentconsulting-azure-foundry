@@ -1,0 +1,14 @@
+tools:
+  - name: ticket-search
+    description: Search historical tickets for similar cases.
+    authentication: service_identity
+    permission_scope: read-only
+    allowed_actions:
+      - search_tickets
+      - read_ticket_metadata
+    denied_actions:
+      - update_ticket
+      - delete_ticket
+      - contact_customer
+    audit_logging: required
+
