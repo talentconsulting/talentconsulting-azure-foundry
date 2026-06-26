@@ -1,0 +1,47 @@
+name: Deploy Repository Change Detector Agent
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "agents/repository-change-detector/**"
+      - "scripts/deploy-agent.py"
+      - "requirements-agent-deploy.txt"
+      - ".github/workflows/deploy-repository-change-detector.yml"
+
+  workflow_dispatch:
+
+jobs:
+  deploy-agent:
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements-agent-deploy.txt
+
+      - name: Deploy agent
+        run: |
+          python scripts/deploy-agent.py --agent-dir agents/repository-change-detector
+        env:
+          AZURE_AI_PROJECT_ENDPOINT: ${{ secrets.AZURE_AI_PROJECT_ENDPOINT }}
