@@ -1,4 +1,4 @@
-name: Deploy OpenAPI Spec Generator
+name: Deploy OpenAPI Specs Generator
 
 on:
   push:

@@ -31,25 +31,41 @@ structured_inputs:
 outputs:
   type: json_schema
   json_schema:
-    name: openapi_spec_output
+    name: openapi_specs_output
     strict: true
     schema:
       type: object
       properties:
-        fileName:
-          type: string
-          description: "Suggested output filename for the generated OpenAPI YAML file."
-        contentType:
-          type: string
-          enum:
-            - "application/yaml"
-        yaml:
-          type: string
-          description: "Complete OpenAPI specification in YAML format."
+        specs:
+          type: array
+          items:
+            type: object
+            properties:
+              fileName:
+                type: string
+                description: "Suggested output filename for this OpenAPI YAML file."
+              serviceName:
+                type: string
+                description: "Detected API/service name."
+              sourcePath:
+                type: string
+                description: "Repository path used to generate this spec."
+              contentType:
+                type: string
+                enum:
+                  - "application/yaml"
+              yaml:
+                type: string
+                description: "Complete OpenAPI specification in YAML format."
+            required:
+              - fileName
+              - serviceName
+              - sourcePath
+              - contentType
+              - yaml
+            additionalProperties: false
       required:
-        - fileName
-        - contentType
-        - yaml
+        - specs
       additionalProperties: false
 
 files:
