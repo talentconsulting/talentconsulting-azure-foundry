@@ -5,9 +5,17 @@
 ```text
 .github/
 └── workflows/
-    └── deploy-agents.yml
+    ├── deploy-openai-specs-generator.yml
+    └── deploy-repository-change-detector.yml
 
 agents/
+├── openapi-specs-generator/
+│   ├── manifest.yaml
+│   ├── instructions.md
+│   ├── tools.yaml
+│   ├── guardrails.md
+│   ├── evaluations.md
+│   └── release-notes.md
 └── repository-change-detector/
     ├── manifest.yaml
     ├── instructions.md
@@ -42,6 +50,12 @@ Deploy one agent:
 python scripts/deploy-agent.py --agent-dir agents/repository-change-detector
 ```
 
+Or:
+
+```bash
+python scripts/deploy-agent.py --agent-dir agents/openapi-specs-generator
+```
+
 Force creation of a new agent/version:
 
 ```bash
@@ -50,9 +64,10 @@ python scripts/deploy-agent.py --agent-dir agents/repository-change-detector --c
 
 ## GitHub Actions Deployment
 
-The workflow must live here:
+The workflows must live here:
 
 ```text
+.github/workflows/deploy-openai-specs-generator.yml
 .github/workflows/deploy-repository-change-detector.yml
 ```
 
@@ -67,7 +82,7 @@ Add these repository secrets:
 | `AZURE_SUBSCRIPTION_ID` | Azure subscription ID |
 | `AZURE_AI_PROJECT_ENDPOINT` | Azure AI Foundry project endpoint |
 
-This workflow uses the GitHub environment `dev`. If the values are stored as environment secrets, create them under `Settings` -> `Environments` -> `dev` -> `Environment secrets`. If you store them as repository secrets instead, remove `environment: dev` from the workflow or keep duplicate values in the environment.
+These workflows use the GitHub environment `dev`. If the values are stored as environment secrets, create them under `Settings` -> `Environments` -> `dev` -> `Environment secrets`. If you store them as repository secrets instead, remove `environment: dev` from the workflows or keep duplicate values in the environment.
 
 If `azure/login` fails with `Not all values are present`, at least one of `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, or `AZURE_SUBSCRIPTION_ID` is missing, empty, or named differently in the repository or environment secrets.
 
