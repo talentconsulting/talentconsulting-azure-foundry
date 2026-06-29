@@ -67,6 +67,8 @@ Add these repository secrets:
 | `AZURE_SUBSCRIPTION_ID` | Azure subscription ID |
 | `AZURE_AI_PROJECT_ENDPOINT` | Azure AI Foundry project endpoint |
 
+This workflow uses the GitHub environment `dev`. If the values are stored as environment secrets, create them under `Settings` -> `Environments` -> `dev` -> `Environment secrets`. If you store them as repository secrets instead, remove `environment: dev` from the workflow or keep duplicate values in the environment.
+
 If `azure/login` fails with `Not all values are present`, at least one of `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, or `AZURE_SUBSCRIPTION_ID` is missing, empty, or named differently in the repository or environment secrets.
 
 For GitHub OpenID Connect authentication, the app registration or managed identity must also have a federated credential that trusts this repository and branch or environment.
