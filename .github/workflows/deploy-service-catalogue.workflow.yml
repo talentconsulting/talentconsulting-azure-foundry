@@ -73,4 +73,13 @@ jobs:
 
       - name: Deploy Service Catalogue Workflow
         run: |
-          python scripts/deploy-workflow.py --workflow-dir workflows/service-catalogue
+          python scripts/deploy-workflow.py \
+            --workflow-dir workflows/service-catalogue \
+            --generated-workflow outputs/service-catalogue.workflow.generated.yml
+
+      - name: Upload generated workflow definition
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: service-catalogue-generated-workflow
+          path: outputs/service-catalogue.workflow.generated.yml

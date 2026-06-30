@@ -18,6 +18,24 @@ def read_yaml(path: Path) -> dict[str, Any]:
     return yaml.safe_load(read_text(path))
 
 
+def build_foundry_workflow(manifest: dict[str, Any]) -> str:
+    workflow = {
+        "$kind": "Workflow",
+        "name": manifest["name"],
+        "description": manifest.get("description", ""),
+        "version": str(manifest.get("version", "1.0.0")),
+        "inputs": manifest.get("inputs", {}),
+        "agents": {
+            key: {"name": value["name"], "input_map": value.get("input_map", {})}
+            for key, value in manifest.get("agents", {}).items()
+        },
+        "steps": manifest.get("steps", []),
+        "outputs": manifest.get("outputs", {}),
+    }
+
+    return yaml.safe_dump(workflow, sort_keys=False)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Deploy an Azure AI Foundry workflow from a workflow manifest."
@@ -32,6 +50,11 @@ def main() -> None:
         default=os.getenv("AZURE_AI_PROJECT_ENDPOINT") or os.getenv("PROJECT_ENDPOINT"),
         help="Azure AI Foundry project endpoint.",
     )
+    parser.add_argument(
+        "--generated-workflow",
+        default=None,
+        help="Optional path to write the generated Foundry workflow YAML before deployment.",
+    )
 
     args = parser.parse_args()
 
@@ -44,7 +67,12 @@ def main() -> None:
     workflow_dir = Path(args.workflow_dir)
     manifest_path = workflow_dir / "manifest.yaml"
     manifest = read_yaml(manifest_path)
-    workflow_yaml = read_text(manifest_path)
+    workflow_yaml = build_foundry_workflow(manifest)
+
+    if args.generated_workflow:
+        generated_path = Path(args.generated_workflow)
+        generated_path.parent.mkdir(parents=True, exist_ok=True)
+        generated_path.write_text(workflow_yaml, encoding="utf-8")
 
     workflow_name = manifest["name"]
     definition = {
