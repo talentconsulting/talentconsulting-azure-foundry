@@ -34,6 +34,10 @@ The agent must not:
 
 The response must be valid JSON matching the configured schema.
 
+Each `specs` item must include `domain-api` and `open-api`.
+
+The `open-api` property must contain the complete OpenAPI YAML document as a string.
+
 The `yaml` property must contain the YAML document as a string.
 
 No additional JSON properties are allowed.

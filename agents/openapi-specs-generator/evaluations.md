@@ -75,9 +75,12 @@ The response must:
 
 - Be valid JSON.
 - Match the configured schema.
+- Include `domain-api`.
+- Include `open-api`.
 - Include `fileName`.
 - Include `contentType` as `application/yaml`.
 - Include `yaml`.
+- Keep `open-api` and `yaml` aligned to the same OpenAPI YAML document.
 - Contain valid OpenAPI YAML.
 - Contain no markdown outside the JSON response.
 - Contain no additional JSON properties.

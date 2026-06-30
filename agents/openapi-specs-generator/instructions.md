@@ -177,6 +177,7 @@ Never combine unrelated APIs into a single specification.
 
 For every API discovered extract:
 
+- Domain API identifier
 - Service name
 - API version
 - Base route
@@ -318,6 +319,8 @@ Do not return:
 {
   "specs": [
     {
+      "domain-api": "accounts-api",
+      "open-api": "openapi: 3.1.0\n...",
       "serviceName": "Accounts API",
       "sourcePath": "src/Accounts.Api",
       "fileName": "accounts-api-openapi.yml",
@@ -325,6 +328,8 @@ Do not return:
       "yaml": "openapi: 3.1.0\n..."
     },
     {
+      "domain-api": "employer-api",
+      "open-api": "openapi: 3.1.0\n...",
       "serviceName": "Employer API",
       "sourcePath": "src/Employer.Api",
       "fileName": "employer-api-openapi.yml",
@@ -335,7 +340,11 @@ Do not return:
 }
 ```
 
-The `yaml` property must contain the **complete OpenAPI YAML document** for that API.
+The `domain-api` property must contain the detected domain API identifier or service API name, using lowercase kebab-case where possible.
+
+The `open-api` property must contain the **complete OpenAPI YAML document** for that API.
+
+The `yaml` property must contain the same complete OpenAPI YAML document as `open-api` for compatibility with existing downstream workflow steps.
 
 ---
 
