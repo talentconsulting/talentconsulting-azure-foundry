@@ -39,6 +39,7 @@ The current template contains deployable Azure AI Foundry agents, including `rep
 │       └── tools.yaml
 ├── scripts/
 │   ├── deploy-agent.py
+│   ├── deploy-workflow.py
 │   └── run-ai-source-control-workflow.py
 ├── workflows/
 │   └── service-catalogue/
@@ -54,7 +55,7 @@ The current template contains deployable Azure AI Foundry agents, including `rep
 
 | Path | Purpose |
 | --- | --- |
-| `.github/workflows/` | GitHub Actions workflows for deploying agents and running the chained AI workflow. |
+| `.github/workflows/` | GitHub Actions workflows for deploying agents and workflow definitions. |
 | `agents/repository-change-detector/manifest.yaml` | Agent metadata, model configuration, inputs, outputs, and file references. |
 | `agents/repository-change-detector/instructions.md` | Core task instructions for the agent. |
 | `agents/repository-change-detector/tools.yaml` | Tool definitions and permissions used by the agent. |
@@ -64,6 +65,7 @@ The current template contains deployable Azure AI Foundry agents, including `rep
 | `agents/openapi-specs-generator/` | Agent source for generating OpenAPI specifications from API repositories. |
 | `agents/openapi-spec-reviewer/` | Agent source for reviewing generated OpenAPI specifications. |
 | `scripts/deploy-agent.py` | Deployment script that assembles the split agent files and deploys to Azure AI Foundry. |
+| `scripts/deploy-workflow.py` | Deployment script that deploys workflow YAML to Azure AI Foundry. |
 | `scripts/run-ai-source-control-workflow.py` | Runtime script that invokes the repository-change detector first, then runs OpenAPI generation and review for changed repositories. |
 | `workflows/service-catalogue/manifest.yaml` | YAML source definition for the chained Azure AI workflow. |
 | `requirements-agent-deploy.txt` | Python dependencies for local and CI deployment. |
@@ -125,6 +127,12 @@ Force creation of a new agent or version:
 python scripts/deploy-agent.py --agent-dir agents/repository-change-detector --create-new-version
 ```
 
+Deploy the service catalogue workflow:
+
+```bash
+python scripts/deploy-workflow.py --workflow-dir workflows/service-catalogue
+```
+
 ## GitHub Actions Deployment
 
 Deployment workflows are stored at:
@@ -148,11 +156,9 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for the full deployment guide.
 
 ## Chained Workflow
 
-Use `.github/workflows/deploy-service-catalogue.workflow.yml` to run the source-control workflow manually.
+Use `.github/workflows/deploy-service-catalogue.workflow.yml` to deploy the source-controlled workflow definition to Azure AI Foundry.
 
 The workflow chain is defined in `workflows/service-catalogue/manifest.yaml`, following the same source-controlled manifest pattern as the agents.
-
-It runs `repository-change-detector` first. For each repository returned, it invokes `openapi-spec-generator`, then loops over each generated spec and invokes `openapi-spec-reviewer`. Generated specs are written to `outputs/ai-source-control-workflow/openapi-specs/`; reviews are written to `outputs/ai-source-control-workflow/openapi-reviews/`.
 
 ## Governance Use
 

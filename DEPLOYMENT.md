@@ -35,6 +35,7 @@ agents/
 
 scripts/
 ├── deploy-agent.py
+├── deploy-workflow.py
 └── run-ai-source-control-workflow.py
 
 workflows/
@@ -80,6 +81,12 @@ Force creation of a new agent/version:
 
 ```bash
 python scripts/deploy-agent.py --agent-dir agents/repository-change-detector --create-new-version
+```
+
+Deploy the service catalogue workflow:
+
+```bash
+python scripts/deploy-workflow.py --workflow-dir workflows/service-catalogue
 ```
 
 ## GitHub Actions Deployment
@@ -186,7 +193,7 @@ Add these GitHub repository secrets:
 
 ## Automatic Deployment
 
-On push to `main`, the workflow detects changed folders under `agents/` and deploys only those agents.
+On push to `main`, the `.agent.yml` workflows detect changed folders under `agents/` and deploy only those agents. The `.workflow.yml` workflow detects changes under `workflows/service-catalogue/` and deploys the workflow definition.
 
 Example changed file:
 
@@ -210,9 +217,9 @@ repository-change-detector
 
 as the `agent_name` input.
 
-## Running The Chained AI Workflow
+## Deploying The Chained AI Workflow
 
-Use the `AI Source Control Workflow` GitHub Actions workflow to run the deployed agents in sequence.
+Use the `Deploy Service Catalogue Workflow` GitHub Actions workflow to deploy the workflow definition to Azure AI Foundry.
 
 The workflow source is defined in:
 
@@ -220,31 +227,11 @@ The workflow source is defined in:
 workflows/service-catalogue/manifest.yaml
 ```
 
-The workflow runs:
+The workflow definition declares this sequence:
 
 1. `repository-change-detector`
 2. `openapi-spec-generator` for each repository returned by the first agent
 3. `openapi-spec-reviewer` for each generated OpenAPI specification
-
-Manual inputs:
-
-| Input | Description |
-|---|---|
-| `manifest_repository` | GitHub repository containing the manifest, for example `TalentConsulting/DomainExplorer` |
-| `manifest_path` | Path to the manifest file, for example `repoManifest.json` |
-| `scan_path` | Path to scan in each changed repository when generating OpenAPI specs |
-| `openapi_version` | Default OpenAPI `info.version` for generated specs |
-
-The workflow writes:
-
-```text
-outputs/ai-source-control-workflow/repositories-to-update.json
-outputs/ai-source-control-workflow/workflow-output.json
-outputs/ai-source-control-workflow/openapi-specs/
-outputs/ai-source-control-workflow/openapi-reviews/
-```
-
-These files are uploaded as the `ai-source-control-workflow-output` artifact.
 
 ## Notes
 

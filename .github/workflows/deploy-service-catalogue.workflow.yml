@@ -1,30 +1,19 @@
-name: AI Source Control Workflow
+name: Deploy Service Catalogue Workflow
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "workflows/service-catalogue/**"
+      - "scripts/deploy-workflow.py"
+      - "requirements-agent-deploy.txt"
+      - ".github/workflows/deploy-service-catalogue.workflow.yml"
+
   workflow_dispatch:
-    inputs:
-      manifest_repository:
-        description: "GitHub repository containing the manifest, for example TalentConsulting/DomainExplorer"
-        required: true
-        type: string
-      manifest_path:
-        description: "Path to the manifest file, for example repoManifest.json"
-        required: true
-        default: "repoManifest.json"
-        type: string
-      scan_path:
-        description: "Path to scan in each changed repository when generating OpenAPI specs"
-        required: true
-        default: "."
-        type: string
-      openapi_version:
-        description: "Default OpenAPI info.version for generated specs"
-        required: true
-        default: "1.0.0"
-        type: string
 
 jobs:
-  run:
+  deploy:
     runs-on: ubuntu-latest
     environment: dev
 
@@ -41,7 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate Azure configuration
+      - name: Validate Azure login configuration
         run: |
           missing=0
 
@@ -82,23 +71,6 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-agent-deploy.txt
 
-      - name: Run chained agent workflow
-        env:
-          MANIFEST_REPOSITORY: ${{ inputs.manifest_repository }}
-          MANIFEST_PATH: ${{ inputs.manifest_path }}
-          SCAN_PATH: ${{ inputs.scan_path }}
-          OPENAPI_VERSION: ${{ inputs.openapi_version }}
+      - name: Deploy Service Catalogue Workflow
         run: |
-          python scripts/run-ai-source-control-workflow.py \
-            --workflow-dir workflows/service-catalogue \
-            --manifest-repository "$MANIFEST_REPOSITORY" \
-            --manifest-path "$MANIFEST_PATH" \
-            --scan-path "$SCAN_PATH" \
-            --openapi-version "$OPENAPI_VERSION" \
-            --output-dir outputs/ai-source-control-workflow
-
-      - name: Upload workflow output
-        uses: actions/upload-artifact@v4
-        with:
-          name: ai-source-control-workflow-output
-          path: outputs/ai-source-control-workflow
+          python scripts/deploy-workflow.py --workflow-dir workflows/service-catalogue
