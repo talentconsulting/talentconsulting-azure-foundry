@@ -71,3 +71,6 @@ steps:
 outputs:
   directory: outputs/ai-source-control-workflow
   summary: workflow-output.json
+
+files:
+  workflow: workflow.yaml

@@ -40,7 +40,8 @@ scripts/
 
 workflows/
 └── service-catalogue/
-    └── manifest.yaml
+    ├── manifest.yaml
+    └── workflow.yaml
 
 requirements-agent-deploy.txt
 ```
@@ -226,6 +227,14 @@ The workflow source is defined in:
 ```text
 workflows/service-catalogue/manifest.yaml
 ```
+
+The deployable Azure AI Foundry CSDL body is defined in:
+
+```text
+workflows/service-catalogue/workflow.yaml
+```
+
+`manifest.yaml` is the source-control/governance manifest. It is not uploaded directly to Foundry. `workflow.yaml` must contain the valid Foundry workflow YAML accepted by `WorkflowAgentDefinition.workflow`.
 
 The workflow definition declares this sequence:
 

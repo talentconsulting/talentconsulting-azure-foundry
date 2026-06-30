@@ -18,22 +18,31 @@ def read_yaml(path: Path) -> dict[str, Any]:
     return yaml.safe_load(read_text(path))
 
 
-def build_foundry_workflow(manifest: dict[str, Any]) -> str:
-    workflow = {
-        "$kind": "Workflow",
-        "name": manifest["name"],
-        "description": manifest.get("description", ""),
-        "version": str(manifest.get("version", "1.0.0")),
-        "inputs": manifest.get("inputs", {}),
-        "agents": {
-            key: {"name": value["name"], "input_map": value.get("input_map", {})}
-            for key, value in manifest.get("agents", {}).items()
-        },
-        "steps": manifest.get("steps", []),
-        "outputs": manifest.get("outputs", {}),
-    }
+def resolve_workflow_source(workflow_dir: Path, manifest: dict[str, Any]) -> Path:
+    workflow_file = manifest.get("files", {}).get("workflow", "workflow.yaml")
+    workflow_path = workflow_dir / workflow_file
+    if not workflow_path.exists():
+        raise FileNotFoundError(
+            "Deployable Foundry workflow YAML was not found. "
+            f"Expected {workflow_path}. The source-control manifest is not the same "
+            "as the CSDL workflow body required by Azure AI Foundry."
+        )
+    return workflow_path
 
-    return yaml.safe_dump(workflow, sort_keys=False)
+
+def validate_workflow_yaml(workflow_yaml: str, workflow_path: Path) -> None:
+    parsed = yaml.safe_load(workflow_yaml)
+    if not isinstance(parsed, dict):
+        raise ValueError(
+            f"{workflow_path} must contain the deployable Azure AI Foundry CSDL workflow YAML. "
+            "The current file is empty, comments-only, or not a YAML object."
+        )
+
+    if "schema_version" in parsed or "workflow_type" in parsed:
+        raise ValueError(
+            f"{workflow_path} appears to contain the source-control manifest shape, "
+            "not the Azure AI Foundry CSDL workflow body."
+        )
 
 
 def main() -> None:
@@ -67,7 +76,9 @@ def main() -> None:
     workflow_dir = Path(args.workflow_dir)
     manifest_path = workflow_dir / "manifest.yaml"
     manifest = read_yaml(manifest_path)
-    workflow_yaml = build_foundry_workflow(manifest)
+    workflow_path = resolve_workflow_source(workflow_dir, manifest)
+    workflow_yaml = read_text(workflow_path)
+    validate_workflow_yaml(workflow_yaml, workflow_path)
 
     if args.generated_workflow:
         generated_path = Path(args.generated_workflow)
