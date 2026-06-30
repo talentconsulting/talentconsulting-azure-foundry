@@ -5,10 +5,19 @@
 ```text
 .github/
 └── workflows/
-    ├── deploy-openai-specs-generator.yml
-    └── deploy-repository-change-detector.yml
+    ├── deploy-openai-spec-reviewer.agent.yml
+    ├── deploy-openai-specs-generator.agent.yml
+    ├── deploy-repository-change-detector.agent.yml
+    └── deploy-service-catalogue.workflow.yml
 
 agents/
+├── openapi-spec-reviewer/
+│   ├── manifest.yaml
+│   ├── instructions.md
+│   ├── tools.yaml
+│   ├── guardrails.md
+│   ├── evaluations.md
+│   └── release-notes.md
 ├── openapi-specs-generator/
 │   ├── manifest.yaml
 │   ├── instructions.md
@@ -25,7 +34,8 @@ agents/
     └── release-notes.md
 
 scripts/
-└── deploy-agent.py
+├── deploy-agent.py
+└── run-ai-source-control-workflow.py
 
 requirements-agent-deploy.txt
 ```
@@ -56,6 +66,12 @@ Or:
 python scripts/deploy-agent.py --agent-dir agents/openapi-specs-generator
 ```
 
+Or:
+
+```bash
+python scripts/deploy-agent.py --agent-dir agents/openapi-spec-reviewer
+```
+
 Force creation of a new agent/version:
 
 ```bash
@@ -67,8 +83,10 @@ python scripts/deploy-agent.py --agent-dir agents/repository-change-detector --c
 The workflows must live here:
 
 ```text
-.github/workflows/deploy-openai-specs-generator.yml
-.github/workflows/deploy-repository-change-detector.yml
+.github/workflows/deploy-openapi-spec-reviewer.agent.yml
+.github/workflows/deploy-openai-specs-generator.agent.yml
+.github/workflows/deploy-repository-change-detector.agent.yml
+.github/workflows/deploy-service-catalogue.workflow.yml
 ```
 
 GitHub Actions will not discover workflows under the `agents/` folder.
@@ -187,6 +205,36 @@ repository-change-detector
 ```
 
 as the `agent_name` input.
+
+## Running The Chained AI Workflow
+
+Use the `AI Source Control Workflow` GitHub Actions workflow to run the deployed agents in sequence.
+
+The workflow runs:
+
+1. `repository-change-detector`
+2. `openapi-spec-generator` for each repository returned by the first agent
+3. `openapi-spec-reviewer` for each generated OpenAPI specification
+
+Manual inputs:
+
+| Input | Description |
+|---|---|
+| `manifest_repository` | GitHub repository containing the manifest, for example `TalentConsulting/DomainExplorer` |
+| `manifest_path` | Path to the manifest file, for example `repoManifest.json` |
+| `scan_path` | Path to scan in each changed repository when generating OpenAPI specs |
+| `openapi_version` | Default OpenAPI `info.version` for generated specs |
+
+The workflow writes:
+
+```text
+outputs/ai-source-control-workflow/repositories-to-update.json
+outputs/ai-source-control-workflow/workflow-output.json
+outputs/ai-source-control-workflow/openapi-specs/
+outputs/ai-source-control-workflow/openapi-reviews/
+```
+
+These files are uploaded as the `ai-source-control-workflow-output` artifact.
 
 ## Notes
 

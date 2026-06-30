@@ -1,0 +1,106 @@
+name: openapi-spec-reviewer
+display_name: "OpenAPI Spec Reviewer"
+description: "Reviews generated OpenAPI specifications and returns governance-oriented validation findings."
+version: "1.0.0"
+
+agent:
+  object: agent.version
+  kind: prompt
+  model: gpt-5.1-codex-mini
+  reasoning:
+    effort: medium
+
+structured_inputs:
+  repoName:
+    type: string
+    description: "Repository name from the repository-change-detector output."
+  repoURL:
+    type: string
+    description: "Repository URL from the repository-change-detector output."
+  domain-api:
+    type: string
+    description: "Domain API identifier from the OpenAPI spec generator output."
+  fileName:
+    type: string
+    description: "Suggested OpenAPI file name."
+  serviceName:
+    type: string
+    description: "Detected service name."
+  sourcePath:
+    type: string
+    description: "Repository path used to generate the specification."
+  contentType:
+    type: string
+    description: "Content type for the generated specification."
+  open-api:
+    type: string
+    description: "Complete generated OpenAPI YAML document."
+
+outputs:
+  type: json_schema
+  json_schema:
+    name: openapi_spec_review
+    strict: true
+    schema:
+      type: object
+      properties:
+        domain-api:
+          type: string
+        fileName:
+          type: string
+        valid:
+          type: boolean
+        severity:
+          type: string
+          enum:
+            - none
+            - low
+            - medium
+            - high
+        recommendedAction:
+          type: string
+          enum:
+            - accept
+            - review
+            - regenerate
+        summary:
+          type: string
+        findings:
+          type: array
+          items:
+            type: object
+            properties:
+              category:
+                type: string
+              severity:
+                type: string
+                enum:
+                  - low
+                  - medium
+                  - high
+              message:
+                type: string
+              path:
+                type: string
+            required:
+              - category
+              - severity
+              - message
+              - path
+            additionalProperties: false
+      required:
+        - domain-api
+        - fileName
+        - valid
+        - severity
+        - recommendedAction
+        - summary
+        - findings
+      additionalProperties: false
+
+files:
+  instructions: instructions.md
+  tools: tools.yaml
+  guardrails: guardrails.md
+  evaluations: evaluations.md
+  release_notes: release-notes.md

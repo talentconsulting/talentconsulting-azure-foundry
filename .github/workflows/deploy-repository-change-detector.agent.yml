@@ -8,7 +8,7 @@ on:
       - "agents/repository-change-detector/**"
       - "scripts/deploy-agent.py"
       - "requirements-agent-deploy.txt"
-      - ".github/workflows/deploy-repository-change-detector.yml"
+      - ".github/workflows/deploy-repository-change-detector.agent.yml"
 
   workflow_dispatch:
 

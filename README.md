@@ -1,8 +1,8 @@
 # AI Source Control Template
 
-This repository is a source-control example for storing, reviewing, and deploying AI agents and related governance evidence.
+This repository is a source-control example for storing, reviewing, deploying, and running AI agents and related governance evidence.
 
-The current template contains one deployable Azure AI Foundry agent: `repository-change-detector`. The agent identifies repositories where a manifest entry is missing `latestCommit` or where `latestCommit` is out of date compared with GitHub.
+The current template contains deployable Azure AI Foundry agents, including `repository-change-detector`. That agent identifies repositories where a manifest entry is missing `latestCommit` or where `latestCommit` is out of date compared with GitHub.
 
 ## Repository Structure
 
@@ -11,8 +11,25 @@ The current template contains one deployable Azure AI Foundry agent: `repository
 ├── .env.example
 ├── .github/
 │   └── workflows/
-│       └── deploy-repository-change-detector.yml
+│       ├── deploy-openapi-spec-reviewer.agent.yml
+│       ├── deploy-openai-specs-generator.agent.yml
+│       ├── deploy-repository-change-detector.agent.yml
+│       └── deploy-service-catalogue.workflow.yml
 ├── agents/
+│   ├── openapi-spec-reviewer/
+│   │   ├── evaluations.md
+│   │   ├── guardrails.md
+│   │   ├── instructions.md
+│   │   ├── manifest.yaml
+│   │   ├── release-notes.md
+│   │   └── tools.yaml
+│   ├── openapi-specs-generator/
+│   │   ├── evaluations.md
+│   │   ├── guardrails.md
+│   │   ├── instructions.md
+│   │   ├── manifest.yaml
+│   │   ├── release-notes.md
+│   │   └── tools.yaml
 │   └── repository-change-detector/
 │       ├── evaluations.md
 │       ├── guardrails.md
@@ -21,7 +38,8 @@ The current template contains one deployable Azure AI Foundry agent: `repository
 │       ├── release-notes.md
 │       └── tools.yaml
 ├── scripts/
-│   └── deploy-agent.py
+│   ├── deploy-agent.py
+│   └── run-ai-source-control-workflow.py
 ├── CODEOWNERS
 ├── CONTRIBUTING.md
 ├── DEPLOYMENT.md
@@ -33,14 +51,17 @@ The current template contains one deployable Azure AI Foundry agent: `repository
 
 | Path | Purpose |
 | --- | --- |
-| `.github/workflows/` | GitHub Actions workflow for deploying the agent. |
+| `.github/workflows/` | GitHub Actions workflows for deploying agents and running the chained AI workflow. |
 | `agents/repository-change-detector/manifest.yaml` | Agent metadata, model configuration, inputs, outputs, and file references. |
 | `agents/repository-change-detector/instructions.md` | Core task instructions for the agent. |
 | `agents/repository-change-detector/tools.yaml` | Tool definitions and permissions used by the agent. |
 | `agents/repository-change-detector/guardrails.md` | Read-only, data-access, output, and failure-behaviour controls. |
 | `agents/repository-change-detector/evaluations.md` | Governance and quality checks for expected behaviour. |
 | `agents/repository-change-detector/release-notes.md` | Release history and operational notes. |
+| `agents/openapi-specs-generator/` | Agent source for generating OpenAPI specifications from API repositories. |
+| `agents/openapi-spec-reviewer/` | Agent source for reviewing generated OpenAPI specifications. |
 | `scripts/deploy-agent.py` | Deployment script that assembles the split agent files and deploys to Azure AI Foundry. |
+| `scripts/run-ai-source-control-workflow.py` | Runtime script that invokes the repository-change detector first, then runs OpenAPI generation and review for changed repositories. |
 | `requirements-agent-deploy.txt` | Python dependencies for local and CI deployment. |
 | `DEPLOYMENT.md` | Deployment setup, GitHub Actions secrets, and local deployment commands. |
 | `CONTRIBUTING.md` | Change-control, review, versioning, release, and retirement guidance. |
@@ -82,6 +103,18 @@ Deploy the agent:
 python scripts/deploy-agent.py --agent-dir agents/repository-change-detector
 ```
 
+Or:
+
+```bash
+python scripts/deploy-agent.py --agent-dir agents/openapi-specs-generator
+```
+
+Or:
+
+```bash
+python scripts/deploy-agent.py --agent-dir agents/openapi-spec-reviewer
+```
+
 Force creation of a new agent or version:
 
 ```bash
@@ -90,10 +123,12 @@ python scripts/deploy-agent.py --agent-dir agents/repository-change-detector --c
 
 ## GitHub Actions Deployment
 
-The workflow is stored at:
+Deployment workflows are stored at:
 
 ```text
-.github/workflows/deploy-repository-change-detector.yml
+.github/workflows/deploy-openapi-spec-reviewer.agent.yml
+.github/workflows/deploy-openai-specs-generator.agent.yml
+.github/workflows/deploy-repository-change-detector.agent.yml
 ```
 
 Required repository secrets:
@@ -106,6 +141,12 @@ Required repository secrets:
 | `AZURE_AI_PROJECT_ENDPOINT` | Azure AI Foundry project endpoint. |
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for the full deployment guide.
+
+## Chained Workflow
+
+Use `.github/workflows/deploy-service-catalogue.workflow.yml` to run the source-control workflow manually.
+
+It runs `repository-change-detector` first. For each repository returned, it invokes `openapi-spec-generator`, then loops over each generated spec and invokes `openapi-spec-reviewer`. Generated specs are written to `outputs/ai-source-control-workflow/openapi-specs/`; reviews are written to `outputs/ai-source-control-workflow/openapi-reviews/`.
 
 ## Governance Use
 

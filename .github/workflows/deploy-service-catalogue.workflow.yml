@@ -1,0 +1,103 @@
+name: AI Source Control Workflow
+
+on:
+  workflow_dispatch:
+    inputs:
+      manifest_repository:
+        description: "GitHub repository containing the manifest, for example TalentConsulting/DomainExplorer"
+        required: true
+        type: string
+      manifest_path:
+        description: "Path to the manifest file, for example repoManifest.json"
+        required: true
+        default: "repoManifest.json"
+        type: string
+      scan_path:
+        description: "Path to scan in each changed repository when generating OpenAPI specs"
+        required: true
+        default: "."
+        type: string
+      openapi_version:
+        description: "Default OpenAPI info.version for generated specs"
+        required: true
+        default: "1.0.0"
+        type: string
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    environment: dev
+
+    permissions:
+      id-token: write
+      contents: read
+
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_AI_PROJECT_ENDPOINT: ${{ secrets.AZURE_AI_PROJECT_ENDPOINT }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Azure configuration
+        run: |
+          missing=0
+
+          if [ -z "$AZURE_CLIENT_ID" ]; then
+            echo "::error::Missing environment secret AZURE_CLIENT_ID."
+            missing=1
+          fi
+
+          if [ -z "$AZURE_TENANT_ID" ]; then
+            echo "::error::Missing environment secret AZURE_TENANT_ID."
+            missing=1
+          fi
+
+          if [ -z "$AZURE_SUBSCRIPTION_ID" ]; then
+            echo "::error::Missing environment secret AZURE_SUBSCRIPTION_ID."
+            missing=1
+          fi
+
+          if [ -z "$AZURE_AI_PROJECT_ENDPOINT" ]; then
+            echo "::error::Missing environment secret AZURE_AI_PROJECT_ENDPOINT."
+            missing=1
+          fi
+
+          exit "$missing"
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-agent-deploy.txt
+
+      - name: Run chained agent workflow
+        env:
+          MANIFEST_REPOSITORY: ${{ inputs.manifest_repository }}
+          MANIFEST_PATH: ${{ inputs.manifest_path }}
+          SCAN_PATH: ${{ inputs.scan_path }}
+          OPENAPI_VERSION: ${{ inputs.openapi_version }}
+        run: |
+          python scripts/run-ai-source-control-workflow.py \
+            --manifest-repository "$MANIFEST_REPOSITORY" \
+            --manifest-path "$MANIFEST_PATH" \
+            --scan-path "$SCAN_PATH" \
+            --openapi-version "$OPENAPI_VERSION" \
+            --output-dir outputs/ai-source-control-workflow
+
+      - name: Upload workflow output
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-source-control-workflow-output
+          path: outputs/ai-source-control-workflow

@@ -8,7 +8,7 @@ on:
       - "agents/openapi-specs-generator/**"
       - "scripts/deploy-agent.py"
       - "requirements-agent-deploy.txt"
-      - ".github/workflows/deploy-openai-specs-generator.yml"
+      - ".github/workflows/deploy-openai-specs-generator.agent.yml"
 
   workflow_dispatch:
 
