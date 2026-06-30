@@ -38,8 +38,6 @@ Each `specs` item must include `domain-api` and `open-api`.
 
 The `open-api` property must contain the complete OpenAPI YAML document as a string.
 
-The `yaml` property must contain the YAML document as a string.
-
 No additional JSON properties are allowed.
 
 ## Failure Behaviour

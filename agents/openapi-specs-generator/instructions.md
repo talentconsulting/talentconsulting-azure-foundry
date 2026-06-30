@@ -324,8 +324,7 @@ Do not return:
       "serviceName": "Accounts API",
       "sourcePath": "src/Accounts.Api",
       "fileName": "accounts-api-openapi.yml",
-      "contentType": "application/yaml",
-      "yaml": "openapi: 3.1.0\n..."
+      "contentType": "application/yaml"
     },
     {
       "domain-api": "employer-api",
@@ -333,8 +332,7 @@ Do not return:
       "serviceName": "Employer API",
       "sourcePath": "src/Employer.Api",
       "fileName": "employer-api-openapi.yml",
-      "contentType": "application/yaml",
-      "yaml": "openapi: 3.1.0\n..."
+      "contentType": "application/yaml"
     }
   ]
 }
@@ -343,8 +341,6 @@ Do not return:
 The `domain-api` property must contain the detected domain API identifier or service API name, using lowercase kebab-case where possible.
 
 The `open-api` property must contain the **complete OpenAPI YAML document** for that API.
-
-The `yaml` property must contain the same complete OpenAPI YAML document as `open-api` for compatibility with existing downstream workflow steps.
 
 ---
 

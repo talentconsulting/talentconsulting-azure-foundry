@@ -60,9 +60,6 @@ outputs:
                 type: string
                 enum:
                   - "application/yaml"
-              yaml:
-                type: string
-                description: "Complete OpenAPI specification in YAML format."
             required:
               - domain-api
               - open-api
@@ -70,7 +67,6 @@ outputs:
               - serviceName
               - sourcePath
               - contentType
-              - yaml
             additionalProperties: false
       required:
         - specs
