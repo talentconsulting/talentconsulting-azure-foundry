@@ -1,0 +1,73 @@
+schema_version: 1
+workflow_type: azure-ai-agent-chain
+name: service-catalogue
+display_name: "Service Catalogue Workflow"
+description: "Detect changed repositories, generate OpenAPI specifications, and review each generated spec."
+version: "1.0.0"
+
+environment:
+  name: dev
+  project_endpoint_env: AZURE_AI_PROJECT_ENDPOINT
+
+inputs:
+  manifest_repository:
+    type: string
+    required: true
+    description: "GitHub repository containing the source-control manifest."
+  manifest_path:
+    type: string
+    required: true
+    default: repoManifest.json
+    description: "Path to the source-control manifest in the manifest repository."
+  scan_path:
+    type: string
+    required: true
+    default: "."
+    description: "Path to scan in each changed repository."
+  openapi_version:
+    type: string
+    required: true
+    default: "1.0.0"
+    description: "Default OpenAPI info.version for generated specs."
+
+agents:
+  repository_change_detector:
+    name: repository-change-detector
+    input_map:
+      manifestRepository: manifest_repository
+      manifestPath: manifest_path
+  openapi_specs_generator:
+    name: openapi-spec-generator
+    input_map:
+      repository: repository
+      scanPath: scan_path
+      openApiTitle: repoName
+      openApiVersion: openapi_version
+  openapi_spec_reviewer:
+    name: openapi-spec-reviewer
+    input_map:
+      repoName: repoName
+      repoURL: repoURL
+      domain-api: domain-api
+      fileName: fileName
+      serviceName: serviceName
+      sourcePath: sourcePath
+      contentType: contentType
+      open-api: open-api
+
+steps:
+  - id: detect_changed_repositories
+    agent: repository_change_detector
+    output: repositories-to-update.json
+  - id: generate_openapi_specs
+    agent: openapi_specs_generator
+    foreach: repositories
+    output_dir: openapi-specs
+  - id: review_openapi_specs
+    agent: openapi_spec_reviewer
+    foreach: specs
+    output_dir: openapi-reviews
+
+outputs:
+  directory: outputs/ai-source-control-workflow
+  summary: workflow-output.json

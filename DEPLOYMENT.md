@@ -37,6 +37,10 @@ scripts/
 ├── deploy-agent.py
 └── run-ai-source-control-workflow.py
 
+workflows/
+└── service-catalogue/
+    └── manifest.yaml
+
 requirements-agent-deploy.txt
 ```
 
@@ -209,6 +213,12 @@ as the `agent_name` input.
 ## Running The Chained AI Workflow
 
 Use the `AI Source Control Workflow` GitHub Actions workflow to run the deployed agents in sequence.
+
+The workflow source is defined in:
+
+```text
+workflows/service-catalogue/manifest.yaml
+```
 
 The workflow runs:
 

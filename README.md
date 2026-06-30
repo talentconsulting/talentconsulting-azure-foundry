@@ -40,6 +40,9 @@ The current template contains deployable Azure AI Foundry agents, including `rep
 ├── scripts/
 │   ├── deploy-agent.py
 │   └── run-ai-source-control-workflow.py
+├── workflows/
+│   └── service-catalogue/
+│       └── manifest.yaml
 ├── CODEOWNERS
 ├── CONTRIBUTING.md
 ├── DEPLOYMENT.md
@@ -62,6 +65,7 @@ The current template contains deployable Azure AI Foundry agents, including `rep
 | `agents/openapi-spec-reviewer/` | Agent source for reviewing generated OpenAPI specifications. |
 | `scripts/deploy-agent.py` | Deployment script that assembles the split agent files and deploys to Azure AI Foundry. |
 | `scripts/run-ai-source-control-workflow.py` | Runtime script that invokes the repository-change detector first, then runs OpenAPI generation and review for changed repositories. |
+| `workflows/service-catalogue/manifest.yaml` | YAML source definition for the chained Azure AI workflow. |
 | `requirements-agent-deploy.txt` | Python dependencies for local and CI deployment. |
 | `DEPLOYMENT.md` | Deployment setup, GitHub Actions secrets, and local deployment commands. |
 | `CONTRIBUTING.md` | Change-control, review, versioning, release, and retirement guidance. |
@@ -145,6 +149,8 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for the full deployment guide.
 ## Chained Workflow
 
 Use `.github/workflows/deploy-service-catalogue.workflow.yml` to run the source-control workflow manually.
+
+The workflow chain is defined in `workflows/service-catalogue/manifest.yaml`, following the same source-controlled manifest pattern as the agents.
 
 It runs `repository-change-detector` first. For each repository returned, it invokes `openapi-spec-generator`, then loops over each generated spec and invokes `openapi-spec-reviewer`. Generated specs are written to `outputs/ai-source-control-workflow/openapi-specs/`; reviews are written to `outputs/ai-source-control-workflow/openapi-reviews/`.
 

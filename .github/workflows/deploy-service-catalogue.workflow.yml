@@ -90,6 +90,7 @@ jobs:
           OPENAPI_VERSION: ${{ inputs.openapi_version }}
         run: |
           python scripts/run-ai-source-control-workflow.py \
+            --workflow-dir workflows/service-catalogue \
             --manifest-repository "$MANIFEST_REPOSITORY" \
             --manifest-path "$MANIFEST_PATH" \
             --scan-path "$SCAN_PATH" \

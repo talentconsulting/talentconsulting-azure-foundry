@@ -6,8 +6,35 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+import yaml
 from azure.ai.projects import AIProjectClient
 from azure.identity import DefaultAzureCredential
+
+
+def read_yaml(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        raise FileNotFoundError(f"Workflow manifest not found: {path}")
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def get_agent_name(workflow: dict[str, Any], key: str, fallback: str) -> str:
+    agent = workflow.get("agents", {}).get(key, {})
+    return str(agent.get("name") or fallback)
+
+
+def get_output_dir(workflow: dict[str, Any], fallback: str) -> Path:
+    return Path(str(workflow.get("outputs", {}).get("directory") or fallback))
+
+
+def get_summary_file(workflow: dict[str, Any], fallback: str) -> str:
+    return str(workflow.get("outputs", {}).get("summary") or fallback)
+
+
+def get_step_value(workflow: dict[str, Any], step_id: str, key: str, fallback: str) -> str:
+    for step in workflow.get("steps", []):
+        if step.get("id") == step_id:
+            return str(step.get(key) or fallback)
+    return fallback
 
 
 def extract_response_text(response: Any) -> str:
@@ -167,18 +194,23 @@ def main() -> None:
         help="Default OpenAPI info.version passed to the specs generator.",
     )
     parser.add_argument(
+        "--workflow-dir",
+        default="workflows/service-catalogue",
+        help="Directory containing the workflow manifest.yaml.",
+    )
+    parser.add_argument(
         "--repository-agent-name",
-        default="repository-change-detector",
+        default=None,
         help="Deployed Foundry agent name for repository change detection.",
     )
     parser.add_argument(
         "--openapi-agent-name",
-        default="openapi-spec-generator",
+        default=None,
         help="Deployed Foundry agent name for OpenAPI spec generation.",
     )
     parser.add_argument(
         "--reviewer-agent-name",
-        default="openapi-spec-reviewer",
+        default=None,
         help="Deployed Foundry agent name for reviewing generated OpenAPI specs.",
     )
     parser.add_argument(
@@ -188,7 +220,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--output-dir",
-        default="outputs/ai-source-control-workflow",
+        default=None,
         help="Directory where workflow outputs are written.",
     )
 
@@ -200,8 +232,30 @@ def main() -> None:
             "or pass --project-endpoint."
         )
 
-    output_dir = Path(args.output_dir)
-    specs_dir = output_dir / "openapi-specs"
+    workflow = read_yaml(Path(args.workflow_dir) / "manifest.yaml")
+
+    repository_agent_name = args.repository_agent_name or get_agent_name(
+        workflow, "repository_change_detector", "repository-change-detector"
+    )
+    openapi_agent_name = args.openapi_agent_name or get_agent_name(
+        workflow, "openapi_specs_generator", "openapi-spec-generator"
+    )
+    reviewer_agent_name = args.reviewer_agent_name or get_agent_name(
+        workflow, "openapi_spec_reviewer", "openapi-spec-reviewer"
+    )
+    output_dir = Path(args.output_dir) if args.output_dir else get_output_dir(
+        workflow, "outputs/ai-source-control-workflow"
+    )
+    summary_file = get_summary_file(workflow, "workflow-output.json")
+    specs_dir = output_dir / get_step_value(
+        workflow, "generate_openapi_specs", "output_dir", "openapi-specs"
+    )
+    reviews_dir = output_dir / get_step_value(
+        workflow, "review_openapi_specs", "output_dir", "openapi-reviews"
+    )
+    detector_output_file = get_step_value(
+        workflow, "detect_changed_repositories", "output", "repositories-to-update.json"
+    )
 
     project = AIProjectClient(
         endpoint=args.project_endpoint,
@@ -213,9 +267,9 @@ def main() -> None:
         "manifestRepository": args.manifest_repository,
         "manifestPath": args.manifest_path,
     }
-    detector_output = invoke_agent(project, args.repository_agent_name, detector_input)
+    detector_output = invoke_agent(project, repository_agent_name, detector_input)
     validate_repository_detector_output(detector_output)
-    write_json(output_dir / "repositories-to-update.json", detector_output)
+    write_json(output_dir / detector_output_file, detector_output)
 
     workflow_output: dict[str, Any] = {
         "repositories": detector_output["repositories"],
@@ -233,7 +287,7 @@ def main() -> None:
             "openApiVersion": args.openapi_version,
         }
 
-        openapi_output = invoke_agent(project, args.openapi_agent_name, generator_input)
+        openapi_output = invoke_agent(project, openapi_agent_name, generator_input)
         validate_openapi_output(openapi_output)
 
         repo_output = {
@@ -251,7 +305,7 @@ def main() -> None:
                 "repoURL": repository["repoURL"],
                 **spec,
             }
-            review_output = invoke_agent(project, args.reviewer_agent_name, review_input)
+            review_output = invoke_agent(project, reviewer_agent_name, review_input)
             validate_review_output(review_output)
 
             repo_output["reviews"].append(review_output)
@@ -273,19 +327,18 @@ def main() -> None:
             spec_path.write_text(spec["open-api"], encoding="utf-8")
 
             review_path = (
-                output_dir
-                / "openapi-reviews"
+                reviews_dir
                 / safe_file_name(repository_name, "repository")
                 / f"{file_name}.review.json"
             )
             write_json(review_path, review_output)
 
-    write_json(output_dir / "workflow-output.json", workflow_output)
+    write_json(output_dir / summary_file, workflow_output)
 
     print(f"Repository detector returned {len(detector_output['repositories'])} repositories.")
     print(f"Generated specs for {len(workflow_output['specs'])} repositories.")
     print(f"Reviewed {len(workflow_output['reviews'])} generated specs.")
-    print(f"Wrote workflow output to {output_dir / 'workflow-output.json'}")
+    print(f"Wrote workflow output to {output_dir / summary_file}")
 
 
 if __name__ == "__main__":
