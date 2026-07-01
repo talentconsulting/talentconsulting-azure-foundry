@@ -40,6 +40,7 @@ The current template contains deployable Azure AI Foundry agents, including `rep
 ├── scripts/
 │   ├── deploy-agent.py
 │   ├── deploy-workflow.py
+│   ├── validate-workflow.py
 │   └── run-ai-source-control-workflow.py
 ├── workflows/
 │   └── service-catalogue/
@@ -56,7 +57,7 @@ The current template contains deployable Azure AI Foundry agents, including `rep
 
 | Path | Purpose |
 | --- | --- |
-| `.github/workflows/` | GitHub Actions workflows for deploying agents and workflow definitions. |
+| `.github/workflows/` | GitHub Actions workflows for deploying agents and packaging workflow code. |
 | `agents/repository-change-detector/manifest.yaml` | Agent metadata, model configuration, inputs, outputs, and file references. |
 | `agents/repository-change-detector/instructions.md` | Core task instructions for the agent. |
 | `agents/repository-change-detector/tools.yaml` | Tool definitions and permissions used by the agent. |
@@ -66,10 +67,11 @@ The current template contains deployable Azure AI Foundry agents, including `rep
 | `agents/openapi-specs-generator/` | Agent source for generating OpenAPI specifications from API repositories. |
 | `agents/openapi-spec-reviewer/` | Agent source for reviewing generated OpenAPI specifications. |
 | `scripts/deploy-agent.py` | Deployment script that assembles the split agent files and deploys to Azure AI Foundry. |
-| `scripts/deploy-workflow.py` | Deployment script that deploys workflow YAML to Azure AI Foundry. |
+| `scripts/deploy-workflow.py` | Optional deployment script for a valid Azure AI Foundry CSDL workflow body. |
+| `scripts/validate-workflow.py` | Validates the source-controlled workflow manifest and referenced agents. |
 | `scripts/run-ai-source-control-workflow.py` | Runtime script that invokes the repository-change detector first, then runs OpenAPI generation and review for changed repositories. |
 | `workflows/service-catalogue/manifest.yaml` | Governance/source-control metadata for the chained workflow. |
-| `workflows/service-catalogue/workflow.yaml` | Deployable Azure AI Foundry CSDL workflow body. |
+| `workflows/service-catalogue/workflow.yaml` | Placeholder for a deployable Azure AI Foundry CSDL workflow body, if exported from Foundry. |
 | `requirements-agent-deploy.txt` | Python dependencies for local and CI deployment. |
 | `DEPLOYMENT.md` | Deployment setup, GitHub Actions secrets, and local deployment commands. |
 | `CONTRIBUTING.md` | Change-control, review, versioning, release, and retirement guidance. |
@@ -129,7 +131,13 @@ Force creation of a new agent or version:
 python scripts/deploy-agent.py --agent-dir agents/repository-change-detector --create-new-version
 ```
 
-Deploy the service catalogue workflow:
+Validate the service catalogue workflow source:
+
+```bash
+python scripts/validate-workflow.py --workflow-dir workflows/service-catalogue
+```
+
+Deploy a Foundry CSDL workflow only after replacing `workflows/service-catalogue/workflow.yaml` with a valid Azure AI Foundry workflow export:
 
 ```bash
 python scripts/deploy-workflow.py --workflow-dir workflows/service-catalogue
@@ -158,11 +166,11 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for the full deployment guide.
 
 ## Chained Workflow
 
-Use `.github/workflows/deploy-service-catalogue.workflow.yml` to deploy the source-controlled workflow definition to Azure AI Foundry.
+Use `.github/workflows/deploy-service-catalogue.workflow.yml` to validate and package the source-controlled workflow code.
 
 The workflow chain is defined in `workflows/service-catalogue/manifest.yaml`, following the same source-controlled manifest pattern as the agents.
 
-The deployable Foundry workflow body must be stored in `workflows/service-catalogue/workflow.yaml`. Replace the placeholder with a valid Azure AI Foundry workflow YAML export before running the deploy workflow.
+The GitHub workflow uploads a `service-catalogue-workflow-code` artifact containing the workflow manifest, runtime script, validator, and dependencies. It does not call Azure AI Foundry workflow deployment while `workflows/service-catalogue/workflow.yaml` is still a placeholder.
 
 ## Governance Use
 
