@@ -1,7 +1,124 @@
-# Azure AI Foundry CSDL workflow body.
-#
-# This file must contain the workflow YAML format accepted by Azure AI Foundry.
-# Keep `manifest.yaml` as the governance/source-control description of the workflow.
-# Replace this placeholder with a valid workflow export/body from Azure AI Foundry before deployment.
-#
-# The deploy script uploads this file as `WorkflowAgentDefinition.workflow`.
+$kind: Workflow
+name: service-catalogue
+displayName: Service Catalogue Workflow
+description: Detect changed repositories, generate OpenAPI specifications, and review each generated spec.
+version: 1.0.0
+
+inputs:
+  manifestRepository:
+    type: string
+    required: true
+    description: GitHub repository containing the source-control manifest.
+  manifestPath:
+    type: string
+    required: true
+    default: repoManifest.json
+    description: Path to the source-control manifest in the manifest repository.
+  scanPath:
+    type: string
+    required: true
+    default: "."
+    description: Directory or file path to scan in each changed repository.
+  openApiVersion:
+    type: string
+    required: true
+    default: 1.0.0
+    description: Default OpenAPI info.version for generated specs.
+
+outputs:
+  repositories:
+    value: "${steps.detect_changed_repositories.output.repositories}"
+  specs:
+    value: "${steps.generate_openapi_specs.output}"
+  reviews:
+    value: "${steps.review_openapi_specs.output}"
+
+steps:
+  - $kind: AgentAction
+    id: detect_changed_repositories
+    agent: repository-change-detector
+    input:
+      manifestRepository: "${inputs.manifestRepository}"
+      manifestPath: "${inputs.manifestPath}"
+    output:
+      repositories:
+        type: array
+        items:
+          type: object
+          properties:
+            repoName:
+              type: string
+            repoURL:
+              type: string
+
+  - $kind: ForEach
+    id: generate_openapi_specs
+    foreach: "${steps.detect_changed_repositories.output.repositories}"
+    item: repository
+    actions:
+      - $kind: AgentAction
+        id: generate_repository_openapi_specs
+        agent: openapi-spec-generator
+        input:
+          repository: "${repository.repoURL}"
+          scanPath: "${inputs.scanPath}"
+          openApiTitle: "${repository.repoName}"
+          openApiVersion: "${inputs.openApiVersion}"
+        output:
+          specs:
+            type: array
+            items:
+              type: object
+              required:
+                - domain-api
+                - open-api
+                - fileName
+                - serviceName
+                - sourcePath
+                - contentType
+              properties:
+                domain-api:
+                  type: string
+                open-api:
+                  type: string
+                fileName:
+                  type: string
+                serviceName:
+                  type: string
+                sourcePath:
+                  type: string
+                contentType:
+                  type: string
+
+  - $kind: ForEach
+    id: review_openapi_specs
+    foreach: "${steps.generate_openapi_specs.output[*].specs[*]}"
+    item: spec
+    actions:
+      - $kind: AgentAction
+        id: review_generated_openapi_spec
+        agent: openapi-spec-reviewer
+        input:
+          repoName: "${spec.repository.repoName}"
+          repoURL: "${spec.repository.repoURL}"
+          domain-api: "${spec.domain-api}"
+          fileName: "${spec.fileName}"
+          serviceName: "${spec.serviceName}"
+          sourcePath: "${spec.sourcePath}"
+          contentType: "${spec.contentType}"
+          open-api: "${spec.open-api}"
+        output:
+          domain-api:
+            type: string
+          fileName:
+            type: string
+          valid:
+            type: boolean
+          severity:
+            type: string
+          recommendedAction:
+            type: string
+          summary:
+            type: string
+          findings:
+            type: array

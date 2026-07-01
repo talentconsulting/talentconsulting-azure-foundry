@@ -91,7 +91,7 @@ Validate the service catalogue workflow source:
 python scripts/validate-workflow.py --workflow-dir workflows/service-catalogue
 ```
 
-Deploy a Foundry CSDL workflow only after replacing `workflows/service-catalogue/workflow.yaml` with a valid Azure AI Foundry workflow export:
+Deploy the source-controlled Foundry workflow body:
 
 ```bash
 python scripts/deploy-workflow.py --workflow-dir workflows/service-catalogue
@@ -203,6 +203,8 @@ Add these GitHub repository secrets:
 
 On push to `main`, the `.agent.yml` workflows detect changed folders under `agents/` and deploy only those agents. The `.workflow.yml` workflow detects changes under `workflows/service-catalogue/`, validates the source-controlled workflow manifest, and uploads a workflow code package artifact.
 
+To deploy the workflow to Azure AI Foundry, run `Deploy Service Catalogue Workflow` manually from GitHub Actions and keep `deploy_to_foundry` enabled. The deploy job uses the `dev` environment secrets and uploads the exact workflow body that was sent to Foundry as `service-catalogue-foundry-workflow`.
+
 Example changed file:
 
 ```text
@@ -225,9 +227,9 @@ repository-change-detector
 
 as the `agent_name` input.
 
-## Packaging The Chained AI Workflow
+## Deploying The Chained AI Workflow
 
-Use the `Deploy Service Catalogue Workflow Code` GitHub Actions workflow to validate the source-controlled workflow manifest and upload the workflow code package artifact.
+Use the `Deploy Service Catalogue Workflow` GitHub Actions workflow to validate the source-controlled workflow manifest and upload the workflow code package artifact. For direct Azure AI Foundry deployment, manually run the same workflow with `deploy_to_foundry` enabled.
 
 The workflow source is defined in:
 
@@ -235,13 +237,13 @@ The workflow source is defined in:
 workflows/service-catalogue/manifest.yaml
 ```
 
-The optional deployable Azure AI Foundry CSDL body is defined in:
+The deployable Azure AI Foundry workflow body is defined in:
 
 ```text
 workflows/service-catalogue/workflow.yaml
 ```
 
-`manifest.yaml` is the source-control/governance manifest. It is not uploaded directly to Foundry as a workflow body. `workflow.yaml` must contain the valid Foundry workflow YAML accepted by `WorkflowAgentDefinition.workflow` before `scripts/deploy-workflow.py` can be used for direct Azure AI Foundry workflow deployment.
+`manifest.yaml` is the source-control/governance manifest. It is not uploaded directly to Foundry as a workflow body. `workflow.yaml` is the workflow body sent to `WorkflowAgentDefinition.workflow` for direct Azure AI Foundry workflow deployment.
 
 The workflow definition declares this sequence:
 
