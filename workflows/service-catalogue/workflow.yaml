@@ -1,124 +1,77 @@
-$kind: Workflow
-name: service-catalogue
-displayName: Service Catalogue Workflow
-description: Detect changed repositories, generate OpenAPI specifications, and review each generated spec.
-version: 1.0.0
+kind: workflow
+trigger:
+  kind: OnConversationStart
+  id: trigger_service_catalogue
+  actions:
+    - kind: InvokeAzureAgent
+      id: detect_changed_repositories
+      agent:
+        name: repository-change-detector
+      conversationId: =System.ConversationId
+      input:
+        manifestRepository: =System.Activity.Text
+        manifestPath: repoManifest.json
+      output:
+        autoSend: true
+        responseObject: Local.RepositoryDetectorResponse
+      auth:
+        scope: service
 
-inputs:
-  manifestRepository:
-    type: string
-    required: true
-    description: GitHub repository containing the source-control manifest.
-  manifestPath:
-    type: string
-    required: true
-    default: repoManifest.json
-    description: Path to the source-control manifest in the manifest repository.
-  scanPath:
-    type: string
-    required: true
-    default: "."
-    description: Directory or file path to scan in each changed repository.
-  openApiVersion:
-    type: string
-    required: true
-    default: 1.0.0
-    description: Default OpenAPI info.version for generated specs.
+    - kind: SetVariable
+      id: set_repositories
+      variable: Local.Repositories
+      value: =Local.RepositoryDetectorResponse.repositories
 
-outputs:
-  repositories:
-    value: "${steps.detect_changed_repositories.output.repositories}"
-  specs:
-    value: "${steps.generate_openapi_specs.output}"
-  reviews:
-    value: "${steps.review_openapi_specs.output}"
+    - kind: Foreach
+      id: for_each_repository
+      items: =Local.Repositories
+      value: Local.Repository
+      actions:
+        - kind: InvokeAzureAgent
+          id: generate_openapi_specs
+          agent:
+            name: openapi-spec-generator
+          conversationId: =System.ConversationId
+          input:
+            repository: =Local.Repository.repoURL
+            scanPath: "."
+            openApiTitle: =Local.Repository.repoName
+            openApiVersion: "1.0.0"
+          output:
+            autoSend: true
+            responseObject: Local.OpenApiGeneratorResponse
+          auth:
+            scope: service
 
-steps:
-  - $kind: AgentAction
-    id: detect_changed_repositories
-    agent: repository-change-detector
-    input:
-      manifestRepository: "${inputs.manifestRepository}"
-      manifestPath: "${inputs.manifestPath}"
-    output:
-      repositories:
-        type: array
-        items:
-          type: object
-          properties:
-            repoName:
-              type: string
-            repoURL:
-              type: string
+        - kind: SetVariable
+          id: set_generated_specs
+          variable: Local.GeneratedSpecs
+          value: =Local.OpenApiGeneratorResponse.specs
 
-  - $kind: ForEach
-    id: generate_openapi_specs
-    foreach: "${steps.detect_changed_repositories.output.repositories}"
-    item: repository
-    actions:
-      - $kind: AgentAction
-        id: generate_repository_openapi_specs
-        agent: openapi-spec-generator
-        input:
-          repository: "${repository.repoURL}"
-          scanPath: "${inputs.scanPath}"
-          openApiTitle: "${repository.repoName}"
-          openApiVersion: "${inputs.openApiVersion}"
-        output:
-          specs:
-            type: array
-            items:
-              type: object
-              required:
-                - domain-api
-                - open-api
-                - fileName
-                - serviceName
-                - sourcePath
-                - contentType
-              properties:
-                domain-api:
-                  type: string
-                open-api:
-                  type: string
-                fileName:
-                  type: string
-                serviceName:
-                  type: string
-                sourcePath:
-                  type: string
-                contentType:
-                  type: string
-
-  - $kind: ForEach
-    id: review_openapi_specs
-    foreach: "${steps.generate_openapi_specs.output[*].specs[*]}"
-    item: spec
-    actions:
-      - $kind: AgentAction
-        id: review_generated_openapi_spec
-        agent: openapi-spec-reviewer
-        input:
-          repoName: "${spec.repository.repoName}"
-          repoURL: "${spec.repository.repoURL}"
-          domain-api: "${spec.domain-api}"
-          fileName: "${spec.fileName}"
-          serviceName: "${spec.serviceName}"
-          sourcePath: "${spec.sourcePath}"
-          contentType: "${spec.contentType}"
-          open-api: "${spec.open-api}"
-        output:
-          domain-api:
-            type: string
-          fileName:
-            type: string
-          valid:
-            type: boolean
-          severity:
-            type: string
-          recommendedAction:
-            type: string
-          summary:
-            type: string
-          findings:
-            type: array
+        - kind: Foreach
+          id: for_each_generated_spec
+          items: =Local.GeneratedSpecs
+          value: Local.GeneratedSpec
+          actions:
+            - kind: InvokeAzureAgent
+              id: review_openapi_spec
+              agent:
+                name: openapi-spec-reviewer
+              conversationId: =System.ConversationId
+              input:
+                repoName: =Local.Repository.repoName
+                repoURL: =Local.Repository.repoURL
+                domain-api: =Local.GeneratedSpec.domain-api
+                fileName: =Local.GeneratedSpec.fileName
+                serviceName: =Local.GeneratedSpec.serviceName
+                sourcePath: =Local.GeneratedSpec.sourcePath
+                contentType: =Local.GeneratedSpec.contentType
+                open-api: =Local.GeneratedSpec.open-api
+              output:
+                autoSend: true
+                responseObject: Local.OpenApiReviewResponse
+              auth:
+                scope: service
+id: ""
+name: Service Catalogue Workflow
+description: Detect changed repositories, generate Swagger/OpenAPI specs, and review each generated spec.
