@@ -2,6 +2,6 @@
 #
 # This file must contain the workflow YAML format accepted by Azure AI Foundry.
 # Keep `manifest.yaml` as the governance/source-control description of the workflow.
-# Replace this placeholder with a valid workflow export from Foundry before deployment.
+# Replace this placeholder with a valid workflow export/body from Azure AI Foundry before deployment.
 #
 # The deploy script uploads this file as `WorkflowAgentDefinition.workflow`.

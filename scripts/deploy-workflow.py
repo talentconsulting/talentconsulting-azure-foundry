@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -35,7 +36,8 @@ def validate_workflow_yaml(workflow_yaml: str, workflow_path: Path) -> None:
     if not isinstance(parsed, dict):
         raise ValueError(
             f"{workflow_path} must contain the deployable Azure AI Foundry CSDL workflow YAML. "
-            "The current file is empty, comments-only, or not a YAML object."
+            "The current file is empty, comments-only, or not a YAML object. "
+            "Export a valid workflow YAML body from Azure AI Foundry and store it in this file."
         )
 
     if "schema_version" in parsed or "workflow_type" in parsed:
@@ -73,40 +75,44 @@ def main() -> None:
             "or pass --project-endpoint."
         )
 
-    workflow_dir = Path(args.workflow_dir)
-    manifest_path = workflow_dir / "manifest.yaml"
-    manifest = read_yaml(manifest_path)
-    workflow_path = resolve_workflow_source(workflow_dir, manifest)
-    workflow_yaml = read_text(workflow_path)
-    validate_workflow_yaml(workflow_yaml, workflow_path)
+    try:
+        workflow_dir = Path(args.workflow_dir)
+        manifest_path = workflow_dir / "manifest.yaml"
+        manifest = read_yaml(manifest_path)
+        workflow_path = resolve_workflow_source(workflow_dir, manifest)
+        workflow_yaml = read_text(workflow_path)
+        validate_workflow_yaml(workflow_yaml, workflow_path)
 
-    if args.generated_workflow:
-        generated_path = Path(args.generated_workflow)
-        generated_path.parent.mkdir(parents=True, exist_ok=True)
-        generated_path.write_text(workflow_yaml, encoding="utf-8")
+        if args.generated_workflow:
+            generated_path = Path(args.generated_workflow)
+            generated_path.parent.mkdir(parents=True, exist_ok=True)
+            generated_path.write_text(workflow_yaml, encoding="utf-8")
 
-    workflow_name = manifest["name"]
-    definition = {
-        "kind": "workflow",
-        "workflow": workflow_yaml,
-    }
+        workflow_name = manifest["name"]
+        definition = {
+            "kind": "workflow",
+            "workflow": workflow_yaml,
+        }
 
-    project = AIProjectClient(
-        endpoint=args.project_endpoint,
-        credential=DefaultAzureCredential(),
-        allow_preview=True,
-    )
+        project = AIProjectClient(
+            endpoint=args.project_endpoint,
+            credential=DefaultAzureCredential(),
+            allow_preview=True,
+        )
 
-    created_workflow = project.agents.create_version(
-        agent_name=workflow_name,
-        definition=definition,
-        description=manifest.get("description"),
-        metadata={
-            "version": str(manifest.get("version", "1.0.0")),
-            "display_name": str(manifest.get("display_name", workflow_name)),
-            "workflow_type": str(manifest.get("workflow_type", "workflow")),
-        },
-    )
+        created_workflow = project.agents.create_version(
+            agent_name=workflow_name,
+            definition=definition,
+            description=manifest.get("description"),
+            metadata={
+                "version": str(manifest.get("version", "1.0.0")),
+                "display_name": str(manifest.get("display_name", workflow_name)),
+                "workflow_type": str(manifest.get("workflow_type", "workflow")),
+            },
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"::error::{exc}", file=sys.stderr)
+        sys.exit(1)
 
     print(f"Created workflow version: {created_workflow}")
 
