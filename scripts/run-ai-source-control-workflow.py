@@ -96,6 +96,13 @@ def safe_file_name(value: str, fallback: str) -> str:
     return candidate or fallback
 
 
+def normalize_scan_path(value: str) -> str:
+    scan_path = value.strip()
+    if scan_path in {"", ".", "./"}:
+        return ""
+    return scan_path.strip("/")
+
+
 def validate_repository_detector_output(payload: dict[str, Any]) -> None:
     repositories = payload.get("repositories")
     if not isinstance(repositories, list):
@@ -263,6 +270,7 @@ def main() -> None:
             "Missing project endpoint. Set AZURE_AI_PROJECT_ENDPOINT or PROJECT_ENDPOINT, "
             "or pass --project-endpoint."
         )
+    scan_path = normalize_scan_path(args.scan_path)
 
     workflow = read_yaml(Path(args.workflow_dir) / "manifest.yaml")
     agent_models = load_agent_models(Path(args.agents_dir))
@@ -323,7 +331,7 @@ def main() -> None:
         repository_ref = repository["repository"]
         generator_input = {
             "repository": repository_ref,
-            "scanPath": args.scan_path,
+            "scanPath": scan_path,
             "openApiTitle": repository_name,
             "openApiVersion": args.openapi_version,
         }

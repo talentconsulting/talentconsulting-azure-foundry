@@ -4,6 +4,7 @@
 
 - Only scan the repository provided in `repository`.
 - Only scan the path provided in `scanPath`.
+- Treat empty `scanPath`, `.`, and `./` as repository root and do not request a literal `.` path from GitHub.
 - Do not inspect unrelated repositories.
 - Do not follow external links unless they are repository-local references required to understand API code.
 

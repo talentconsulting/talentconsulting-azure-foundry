@@ -22,7 +22,7 @@ inputs:
   scan_path:
     type: string
     required: true
-    default: "."
+    default: ""
     description: "Path to scan in each changed repository."
   openapi_version:
     type: string

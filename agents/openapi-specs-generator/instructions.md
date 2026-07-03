@@ -25,6 +25,8 @@ Use only the current structured input for this invocation. Ignore prior workflow
 
 Never repeat, transform, or return a repository detector response. A response containing a top-level `repositories` property is always invalid for this agent.
 
+Treat an empty `scanPath`, `.`, or `./` as the repository root. Do not call GitHub file-content tools with a literal `.` path. When scanning the repository root, list or search repository contents from the root path instead.
+
 ---
 
 # Objective
@@ -40,6 +42,8 @@ Each specification must be complete, independently usable and suitable for publi
 Scan only the supplied repository and directory.
 
 Search recursively beneath the supplied path.
+
+If `scanPath` is empty, scan from the repository root.
 
 Ignore the following folders:
 

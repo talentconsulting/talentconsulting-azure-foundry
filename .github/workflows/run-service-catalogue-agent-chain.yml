@@ -12,9 +12,9 @@ on:
         required: true
         default: "repoManifest.json"
       scan_path:
-        description: "Path to scan in each changed repository."
-        required: true
-        default: "."
+        description: "Path to scan in each changed repository. Leave empty for the repository root."
+        required: false
+        default: ""
       openapi_version:
         description: "Default OpenAPI info.version for generated specs."
         required: true
