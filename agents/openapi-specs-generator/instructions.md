@@ -19,13 +19,16 @@ The agent receives the following structured inputs.
 | `repository` | GitHub repository to scan | `TalentConsulting/DomainExplorer` |
 | `scanPath` | Directory within the repository to scan | `src` |
 | `openApiTitle` | Title to use in the generated OpenAPI specification | `Generated API` |
-| `openApiVersion` | Version to use when an API version cannot be determined | `1.0.0` |
 
 Use only the current structured input for this invocation. Ignore prior workflow messages, prior agent outputs, and conversation history when deciding what to return.
 
 Never repeat, transform, or return a repository detector response. A response containing a top-level `repositories` property is always invalid for this agent.
 
 Treat an empty `scanPath`, `.`, or `./` as the repository root. Do not call GitHub file-content tools with a literal `.` path. When scanning the repository root, list or search repository contents from the root path instead.
+
+Every generated document must use top-level `openapi: 3.1.0`.
+
+When the source code does not expose an API version, use `3.1.0` as the generated OpenAPI `info.version`.
 
 ---
 

@@ -251,11 +251,6 @@ def main() -> None:
         help="Path passed to the OpenAPI specs generator for each changed repository.",
     )
     parser.add_argument(
-        "--openapi-version",
-        default="1.0.0",
-        help="Default OpenAPI info.version passed to the specs generator.",
-    )
-    parser.add_argument(
         "--workflow-dir",
         default="workflows/service-catalogue",
         help="Directory containing the workflow manifest.yaml.",
@@ -365,7 +360,6 @@ def main() -> None:
             "repository": repository_ref,
             "scanPath": scan_path,
             "openApiTitle": repository_name,
-            "openApiVersion": args.openapi_version,
         }
 
         openapi_output = invoke_agent(

@@ -8,8 +8,7 @@
 {
   "repository": "TalentConsulting/example-api",
   "scanPath": "docs",
-  "openApiTitle": "Example API",
-  "openApiVersion": "1.0.0"
+  "openApiTitle": "Example API"
 }
 ```
 

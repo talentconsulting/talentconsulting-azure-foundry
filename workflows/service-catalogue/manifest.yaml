@@ -24,12 +24,6 @@ inputs:
     required: true
     default: ""
     description: "Path to scan in each changed repository."
-  openapi_version:
-    type: string
-    required: true
-    default: "1.0.0"
-    description: "Default OpenAPI info.version for generated specs."
-
 agents:
   repository_change_detector:
     name: repository-change-detector
@@ -42,7 +36,6 @@ agents:
       repository: repository
       scanPath: scan_path
       openApiTitle: repoName
-      openApiVersion: openapi_version
   repository_file_pr_creator:
     name: repository-file-pr-creator
     input_map:

@@ -221,7 +221,6 @@ Required manual inputs:
 | `manifest_repository` | `TalentConsulting/DomainExplorer` |
 | `manifest_path` | `repoManifest.json` |
 | `scan_path` | empty repository root |
-| `openapi_version` | `1.0.0` |
 
 Example changed file:
 

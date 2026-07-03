@@ -9,7 +9,7 @@
   "changes": [
     {
       "filename": "accounts-api-openapi.yml",
-      "content": "openapi: 3.1.0\ninfo:\n  title: Accounts API\n  version: 1.0.0\npaths: {}\n",
+      "content": "openapi: 3.1.0\ninfo:\n  title: Accounts API\n  version: 3.1.0\npaths: {}\n",
       "repository": "https://github.com/TalentConsulting/example-api",
       "path": "openapi"
     }
@@ -36,13 +36,13 @@
   "changes": [
     {
       "filename": "accounts-api-openapi.yml",
-      "content": "openapi: 3.1.0\ninfo:\n  title: Accounts API\n  version: 1.0.0\npaths: {}\n",
+      "content": "openapi: 3.1.0\ninfo:\n  title: Accounts API\n  version: 3.1.0\npaths: {}\n",
       "repository": "TalentConsulting/example-api",
       "path": "openapi"
     },
     {
       "filename": "employer-api-openapi.yml",
-      "content": "openapi: 3.1.0\ninfo:\n  title: Employer API\n  version: 1.0.0\npaths: {}\n",
+      "content": "openapi: 3.1.0\ninfo:\n  title: Employer API\n  version: 3.1.0\npaths: {}\n",
       "repository": "TalentConsulting/example-api",
       "path": "openapi"
     }
@@ -70,7 +70,7 @@
     "specs": [
       {
         "domain-api": "accounts-api",
-        "open-api": "openapi: 3.1.0\ninfo:\n  title: Accounts API\n  version: 1.0.0\npaths: {}\n",
+        "open-api": "openapi: 3.1.0\ninfo:\n  title: Accounts API\n  version: 3.1.0\npaths: {}\n",
         "fileName": "accounts-api-openapi.yml",
         "serviceName": "Accounts API",
         "sourcePath": ".",

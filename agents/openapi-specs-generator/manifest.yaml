@@ -23,10 +23,6 @@ structured_inputs:
     type: string
     description: "Title to use in the generated OpenAPI specification"
     default: "Generated API"
-  openApiVersion:
-    type: string
-    description: "Version to use in the generated OpenAPI specification"
-    default: "1.0.0"
 
 outputs:
   type: json_schema
