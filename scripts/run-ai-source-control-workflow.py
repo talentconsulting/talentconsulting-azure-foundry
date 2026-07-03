@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import re
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -101,6 +102,33 @@ def normalize_scan_path(value: str) -> str:
     if scan_path in {"", ".", "./"}:
         return ""
     return scan_path.strip("/")
+
+
+def normalize_repository_ref(value: str) -> str:
+    repository = value.strip()
+    for prefix in ("https://github.com/", "http://github.com/"):
+        if repository.lower().startswith(prefix):
+            repository = repository[len(prefix) :]
+            break
+    repository = repository.strip("/").removesuffix(".git")
+    if repository.count("/") < 1:
+        raise ValueError(
+            f"Repository '{value}' must be in owner/name or https://github.com/owner/name form."
+        )
+    return repository
+
+
+def build_branch_name(repository: str) -> str:
+    repository_part = safe_file_name(repository.replace("/", "-"), "repository")
+    run_id = os.getenv("GITHUB_RUN_ID")
+    run_attempt = os.getenv("GITHUB_RUN_ATTEMPT")
+    if run_id:
+        suffix = run_id
+        if run_attempt:
+            suffix = f"{suffix}-{run_attempt}"
+    else:
+        suffix = uuid.uuid4().hex[:8]
+    return f"ai-source-control/openapi-{repository_part}-{suffix}"
 
 
 def validate_repository_detector_output(payload: dict[str, Any]) -> None:
@@ -271,6 +299,7 @@ def main() -> None:
             "or pass --project-endpoint."
         )
     scan_path = normalize_scan_path(args.scan_path)
+    manifest_repository_ref = normalize_repository_ref(args.manifest_repository)
 
     workflow = read_yaml(Path(args.workflow_dir) / "manifest.yaml")
     agent_models = load_agent_models(Path(args.agents_dir))
@@ -321,6 +350,7 @@ def main() -> None:
     write_json(output_dir / detector_output_file, detector_output)
 
     workflow_output: dict[str, Any] = {
+        "manifestRepository": manifest_repository_ref,
         "repositories": detector_output["repositories"],
         "specs": [],
         "pullRequests": [],
@@ -330,6 +360,7 @@ def main() -> None:
     for repository in detector_output["repositories"]:
         repository_name = repository["repoName"]
         repository_ref = repository["repository"]
+        repository_output_dir = safe_file_name(repository_ref.replace("/", "-"), "repository")
         generator_input = {
             "repository": repository_ref,
             "scanPath": scan_path,
@@ -349,6 +380,7 @@ def main() -> None:
             "repoName": repository_name,
             "repoURL": repository["repoURL"],
             "repository": repository_ref,
+            "pullRequestRepository": manifest_repository_ref,
             "specs": openapi_output["specs"],
             "pullRequest": None,
             "skipped": False,
@@ -358,7 +390,7 @@ def main() -> None:
 
         generator_output_path = (
             specs_dir
-            / safe_file_name(repository_name, "repository")
+            / repository_output_dir
             / "openapi-generator-response.json"
         )
         write_json(generator_output_path, openapi_output)
@@ -381,17 +413,18 @@ def main() -> None:
                 spec.get("fileName", ""),
                 f"{safe_file_name(repository_name, 'repository')}-openapi.yml",
             )
-            spec_path = specs_dir / safe_file_name(repository_name, "repository") / file_name
+            spec_path = specs_dir / repository_output_dir / file_name
             spec_path.parent.mkdir(parents=True, exist_ok=True)
             spec_path.write_text(spec["open-api"], encoding="utf-8")
 
         pr_input = {
-            "repository": repository_ref,
-            "path": "openapi-specs",
+            "repository": manifest_repository_ref,
+            "path": f"openapi-specs/{repository_output_dir}",
             "openApiGeneratorResponse": openapi_output,
+            "branchName": build_branch_name(f"{manifest_repository_ref}-{repository_ref}"),
             "pullRequestTitle": f"Add generated OpenAPI specs for {repository_name}",
             "pullRequestBody": (
-                f"Generated OpenAPI specifications for {repository_name}."
+                f"Generated OpenAPI specifications for {repository_name} from {repository_ref}."
             ),
         }
         pr_output = invoke_agent(
@@ -413,13 +446,14 @@ def main() -> None:
                 "repoName": repository_name,
                 "repoURL": repository["repoURL"],
                 "repository": repository_ref,
+                "pullRequestRepository": manifest_repository_ref,
                 "pullRequest": pr_output,
             }
         )
 
         pr_path = (
             pull_requests_dir
-            / safe_file_name(repository_name, "repository")
+            / repository_output_dir
             / "pull-request.json"
         )
         write_json(pr_path, pr_output)

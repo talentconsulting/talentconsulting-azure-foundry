@@ -2,7 +2,7 @@ schema_version: 1
 workflow_type: github-actions-agent-chain
 name: service-catalogue
 display_name: "Service Catalogue Workflow"
-description: "Detect changed repositories, generate OpenAPI specifications, and create pull requests with generated specs."
+description: "Detect changed repositories, generate OpenAPI specifications, and create pull requests in the manifest repository with generated specs."
 version: "1.0.0"
 
 environment:
@@ -46,7 +46,7 @@ agents:
   repository_file_pr_creator:
     name: repository-file-pr-creator
     input_map:
-      repository: repository
+      repository: manifest_repository
       path: path
       openApiGeneratorResponse: openApiGeneratorResponse
       pullRequestTitle: pullRequestTitle
