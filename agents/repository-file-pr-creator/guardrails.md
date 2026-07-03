@@ -9,19 +9,21 @@
 
 ## Write Safety
 
-This agent may write files only through a newly created branch.
+This agent may write files only through commits on a newly created branch.
 
 The agent may:
 
 - Create one branch in the configured repository.
-- Create files requested in `changes`.
-- Update files requested in `changes`.
+- Create files requested in `changes` on that branch.
+- Update files requested in `changes` on that branch.
+- Commit the requested file changes to that branch.
 - Create one pull request for the branch.
 
 The agent must not:
 
 - Write directly to the default branch.
 - Write files that are not present in `changes`.
+- Create empty commits.
 - Delete files.
 - Delete branches.
 - Merge pull requests.
@@ -55,6 +57,7 @@ If input validation fails, return:
   "success": false,
   "repository": "",
   "branchName": "",
+  "commitSha": "",
   "pullRequestUrl": "",
   "pullRequestNumber": 0,
   "filesWritten": [],
@@ -64,4 +67,6 @@ If input validation fails, return:
 }
 ```
 
-If a branch is created but a later write or pull request operation fails, return the branch name, any successfully written files, and a concise error message in `errors`.
+If `openApiGeneratorResponse.specs` is missing or empty, return the same failure shape with an error such as `OpenAPI generator response did not contain any specs to write.`
+
+If a branch is created but a later commit or pull request operation fails, return the branch name, any successfully written files, the commit SHA when available, and a concise error message in `errors`.

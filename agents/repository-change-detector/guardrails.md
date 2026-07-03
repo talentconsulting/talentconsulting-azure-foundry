@@ -39,6 +39,6 @@ If the manifest cannot be read, return:
 }
 ```
 
-If an individual repository cannot be checked, include that repository in the output using the manifest `repoName` and `repoURL`.
+If an individual repository cannot be checked, include that repository in the output using the manifest `repoName`, `repoURL`, and normalized `repository`.
 
 This allows downstream agents or workflows to decide whether to retry, skip, or raise a validation issue.

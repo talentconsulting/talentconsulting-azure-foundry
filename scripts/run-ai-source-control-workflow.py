@@ -4,7 +4,6 @@ import os
 import re
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
 
 import yaml
 from azure.ai.projects import AIProjectClient
@@ -76,15 +75,6 @@ def safe_file_name(value: str, fallback: str) -> str:
     return candidate or fallback
 
 
-def repository_from_url(repo_url: str, repo_name: str) -> str:
-    parsed = urlparse(repo_url)
-    if parsed.netloc.lower() == "github.com":
-        path = parsed.path.strip("/").removesuffix(".git")
-        if path.count("/") >= 1:
-            return path
-    return repo_name
-
-
 def validate_repository_detector_output(payload: dict[str, Any]) -> None:
     repositories = payload.get("repositories")
     if not isinstance(repositories, list):
@@ -93,14 +83,16 @@ def validate_repository_detector_output(payload: dict[str, Any]) -> None:
     for index, repository in enumerate(repositories):
         if not isinstance(repository, dict):
             raise ValueError(f"repositories[{index}] must be an object.")
-        if set(repository) != {"repoName", "repoURL"}:
+        if set(repository) != {"repoName", "repoURL", "repository"}:
             raise ValueError(
-                f"repositories[{index}] must contain only repoName and repoURL."
+                f"repositories[{index}] must contain only repoName, repoURL, and repository."
             )
         if not isinstance(repository["repoName"], str) or not repository["repoName"]:
             raise ValueError(f"repositories[{index}].repoName must be a non-empty string.")
         if not isinstance(repository["repoURL"], str) or not repository["repoURL"]:
             raise ValueError(f"repositories[{index}].repoURL must be a non-empty string.")
+        if not isinstance(repository["repository"], str) or not repository["repository"]:
+            raise ValueError(f"repositories[{index}].repository must be a non-empty string.")
 
 
 def validate_openapi_output(payload: dict[str, Any]) -> None:
@@ -125,6 +117,7 @@ def validate_pull_request_output(payload: dict[str, Any]) -> None:
         "success",
         "repository",
         "branchName",
+        "commitSha",
         "pullRequestUrl",
         "pullRequestNumber",
         "filesWritten",
@@ -138,6 +131,8 @@ def validate_pull_request_output(payload: dict[str, Any]) -> None:
         raise ValueError("Pull request response repository must be a string.")
     if not isinstance(payload["branchName"], str):
         raise ValueError("Pull request response branchName must be a string.")
+    if not isinstance(payload["commitSha"], str):
+        raise ValueError("Pull request response commitSha must be a string.")
     if not isinstance(payload["pullRequestUrl"], str):
         raise ValueError("Pull request response pullRequestUrl must be a string.")
     if not isinstance(payload["pullRequestNumber"], int):
@@ -285,7 +280,7 @@ def main() -> None:
 
     for repository in detector_output["repositories"]:
         repository_name = repository["repoName"]
-        repository_ref = repository_from_url(repository["repoURL"], repository_name)
+        repository_ref = repository["repository"]
         generator_input = {
             "repository": repository_ref,
             "scanPath": args.scan_path,
@@ -305,7 +300,6 @@ def main() -> None:
         }
         workflow_output["specs"].append(repo_output)
 
-        changes: list[dict[str, str]] = []
         for spec in openapi_output["specs"]:
             file_name = safe_file_name(
                 spec.get("fileName", ""),
@@ -315,17 +309,10 @@ def main() -> None:
             spec_path.parent.mkdir(parents=True, exist_ok=True)
             spec_path.write_text(spec["open-api"], encoding="utf-8")
 
-            changes.append(
-                {
-                    "filename": file_name,
-                    "content": spec["open-api"],
-                    "repository": repository_ref,
-                    "path": "openapi-specs",
-                }
-            )
-
         pr_input = {
-            "changes": changes,
+            "repository": repository_ref,
+            "path": "openapi-specs",
+            "openApiGeneratorResponse": openapi_output,
             "pullRequestTitle": f"Add generated OpenAPI specs for {repository_name}",
             "pullRequestBody": (
                 f"Generated OpenAPI specifications for {repository_name}."
@@ -333,6 +320,11 @@ def main() -> None:
         }
         pr_output = invoke_agent(project, pr_creator_agent_name, pr_input)
         validate_pull_request_output(pr_output)
+        if not pr_output["success"]:
+            errors = "; ".join(pr_output["errors"]) or "Pull request creator reported failure."
+            raise ValueError(
+                f"Pull request creation failed for {repository_ref}: {errors}"
+            )
 
         repo_output["pullRequest"] = pr_output
         workflow_output["pullRequests"].append(

@@ -18,7 +18,12 @@ The agent receives the following structured inputs.
 |--------|-------------|---------|
 | `repository` | GitHub repository to scan | `TalentConsulting/DomainExplorer` |
 | `scanPath` | Directory within the repository to scan | `src` |
-| `defaultOpenApiVersion` | Version to use when an API version cannot be determined | `1.0.0` |
+| `openApiTitle` | Title to use in the generated OpenAPI specification | `Generated API` |
+| `openApiVersion` | Version to use when an API version cannot be determined | `1.0.0` |
+
+Use only the current structured input for this invocation. Ignore prior workflow messages, prior agent outputs, and conversation history when deciding what to return.
+
+Never repeat, transform, or return a repository detector response. A response containing a top-level `repositories` property is always invalid for this agent.
 
 ---
 
@@ -301,6 +306,8 @@ If something cannot be confidently inferred then omit it rather than guessing.
 
 Return **only** valid JSON matching the configured output schema.
 
+The top-level JSON object must always contain `specs` and must never contain `repositories`.
+
 Do not return:
 
 - Markdown
@@ -310,6 +317,15 @@ Do not return:
 - Comments
 - Stack traces
 - Additional properties
+- Refusal or apology text
+
+If you cannot read the repository, cannot access the scan path, cannot identify any API, or cannot safely infer endpoints, return valid schema JSON with an empty `specs` array:
+
+```json
+{
+  "specs": []
+}
+```
 
 ---
 

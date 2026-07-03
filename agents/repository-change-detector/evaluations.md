@@ -42,7 +42,8 @@ The manifest contains no repositories.
   "repositories": [
     {
       "repoName": "example-api",
-      "repoURL": "https://github.com/TalentConsulting/example-api"
+      "repoURL": "https://github.com/TalentConsulting/example-api",
+      "repository": "TalentConsulting/example-api"
     }
   ]
 }
@@ -99,7 +100,8 @@ def456
   "repositories": [
     {
       "repoName": "example-api",
-      "repoURL": "https://github.com/TalentConsulting/example-api"
+      "repoURL": "https://github.com/TalentConsulting/example-api",
+      "repository": "TalentConsulting/example-api"
     }
   ]
 }
@@ -124,7 +126,8 @@ def456
   "repositories": [
     {
       "repoName": "missing-api",
-      "repoURL": "https://github.com/TalentConsulting/missing-api"
+      "repoURL": "https://github.com/TalentConsulting/missing-api",
+      "repository": "TalentConsulting/missing-api"
     }
   ]
 }

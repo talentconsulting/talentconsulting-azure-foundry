@@ -37,9 +37,13 @@ outputs:
                 type: string
               repoURL:
                 type: string
+              repository:
+                type: string
+                description: "Normalized GitHub repository in owner/name form, derived from repoURL when possible."
             required:
               - repoName
               - repoURL
+              - repository
             additionalProperties: false
       required:
         - repositories

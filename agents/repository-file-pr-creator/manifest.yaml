@@ -1,6 +1,6 @@
 name: repository-file-pr-creator
 display_name: "Repository File PR Creator"
-description: "Creates a branch, writes requested files to a GitHub repository, and opens a pull request."
+description: "Creates a branch, commits requested files to a GitHub repository, and opens a pull request."
 version: "1.0.0"
 
 agent:
@@ -13,6 +13,7 @@ agent:
 structured_inputs:
   changes:
     type: array
+    required: false
     description: "Files to create or update. Every item must target the same repository."
     items:
       type: object
@@ -35,6 +36,18 @@ structured_inputs:
         - repository
         - path
       additionalProperties: false
+  repository:
+    type: string
+    required: false
+    description: "Repository to use when converting a workflow OpenAPI generator response into file changes."
+  path:
+    type: string
+    required: false
+    description: "Directory path to use when converting a workflow OpenAPI generator response into file changes."
+  openApiGeneratorResponse:
+    type: object
+    required: false
+    description: "Optional OpenAPI generator response containing a specs array to convert into file changes."
   branchName:
     type: string
     required: false
@@ -61,6 +74,8 @@ outputs:
         repository:
           type: string
         branchName:
+          type: string
+        commitSha:
           type: string
         pullRequestUrl:
           type: string
@@ -91,6 +106,7 @@ outputs:
         - success
         - repository
         - branchName
+        - commitSha
         - pullRequestUrl
         - pullRequestNumber
         - filesWritten

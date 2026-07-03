@@ -42,6 +42,20 @@ No additional JSON properties are allowed.
 
 ## Failure Behaviour
 
-If the repository cannot be read, return a valid minimal OpenAPI document with empty `paths`.
+If the repository cannot be read, return:
 
-If the scan path cannot be found, return a valid OpenAPI document with empty `paths`.
+```json
+{
+  "specs": []
+}
+```
+
+If the scan path cannot be found, return:
+
+```json
+{
+  "specs": []
+}
+```
+
+Do not return refusal text, apology text, markdown, or prose.

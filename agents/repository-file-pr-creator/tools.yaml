@@ -7,7 +7,7 @@ tools:
 
 tool_usage:
   github:
-    purpose: "Create branches, create or update files from structured input, and open pull requests."
+    purpose: "Create branches, commit structured file changes, and open pull requests."
     allowed_operations:
       - "Read repository contents"
       - "Read default branch metadata"
@@ -15,6 +15,8 @@ tool_usage:
       - "Create branches"
       - "Create files"
       - "Update files"
+      - "Commit file changes"
+      - "Push multiple files to a branch"
       - "Create pull requests"
     disallowed_operations:
       - "Delete files"

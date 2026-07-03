@@ -1,0 +1,103 @@
+name: Run Service Catalogue Agent Chain
+
+on:
+  workflow_dispatch:
+    inputs:
+      manifest_repository:
+        description: "Repository containing the source-control manifest."
+        required: true
+        default: "TalentConsulting/DomainExplorer"
+      manifest_path:
+        description: "Path to the source-control manifest in the repository."
+        required: true
+        default: "repoManifest.json"
+      scan_path:
+        description: "Path to scan in each changed repository."
+        required: true
+        default: "."
+      openapi_version:
+        description: "Default OpenAPI info.version for generated specs."
+        required: true
+        default: "1.0.0"
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    environment: dev
+
+    permissions:
+      id-token: write
+      contents: read
+
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_AI_PROJECT_ENDPOINT: ${{ secrets.AZURE_AI_PROJECT_ENDPOINT }}
+      OUTPUT_DIR: outputs/ai-source-control-workflow
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Azure login configuration
+        run: |
+          missing=0
+
+          if [ -z "$AZURE_CLIENT_ID" ]; then
+            echo "::error::Missing repository secret AZURE_CLIENT_ID."
+            missing=1
+          fi
+
+          if [ -z "$AZURE_TENANT_ID" ]; then
+            echo "::error::Missing repository secret AZURE_TENANT_ID."
+            missing=1
+          fi
+
+          if [ -z "$AZURE_SUBSCRIPTION_ID" ]; then
+            echo "::error::Missing repository secret AZURE_SUBSCRIPTION_ID."
+            missing=1
+          fi
+
+          if [ -z "$AZURE_AI_PROJECT_ENDPOINT" ]; then
+            echo "::error::Missing repository secret AZURE_AI_PROJECT_ENDPOINT."
+            missing=1
+          fi
+
+          exit "$missing"
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-agent-deploy.txt
+
+      - name: Validate runner
+        run: |
+          python -m py_compile scripts/run-ai-source-control-workflow.py
+          python scripts/validate-workflow.py --workflow-dir workflows/service-catalogue
+
+      - name: Run service catalogue agent chain
+        run: |
+          python scripts/run-ai-source-control-workflow.py \
+            --manifest-repository "${{ inputs.manifest_repository }}" \
+            --manifest-path "${{ inputs.manifest_path }}" \
+            --scan-path "${{ inputs.scan_path }}" \
+            --openapi-version "${{ inputs.openapi_version }}" \
+            --output-dir "$OUTPUT_DIR"
+
+      - name: Upload workflow outputs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: service-catalogue-agent-chain-output
+          path: ${{ env.OUTPUT_DIR }}
+          if-no-files-found: ignore

@@ -15,7 +15,7 @@ The current template contains deployable Azure AI Foundry agents, including `rep
 │       ├── deploy-openai-specs-generator.agent.yml
 │       ├── deploy-repository-file-pr-creator.agent.yml
 │       ├── deploy-repository-change-detector.agent.yml
-│       └── deploy-service-catalogue.workflow.yml
+│       └── run-service-catalogue-agent-chain.yml
 ├── agents/
 │   ├── openapi-spec-reviewer/
 │   │   ├── evaluations.md
@@ -47,13 +47,11 @@ The current template contains deployable Azure AI Foundry agents, including `rep
 │       └── tools.yaml
 ├── scripts/
 │   ├── deploy-agent.py
-│   ├── deploy-workflow.py
 │   ├── validate-workflow.py
 │   └── run-ai-source-control-workflow.py
 ├── workflows/
 │   └── service-catalogue/
-│       ├── manifest.yaml
-│       └── workflow.yaml
+│       └── manifest.yaml
 ├── CODEOWNERS
 ├── CONTRIBUTING.md
 ├── DEPLOYMENT.md
@@ -65,7 +63,7 @@ The current template contains deployable Azure AI Foundry agents, including `rep
 
 | Path | Purpose |
 | --- | --- |
-| `.github/workflows/` | GitHub Actions workflows for deploying agents and packaging workflow code. |
+| `.github/workflows/` | GitHub Actions workflows for deploying agents and running the service catalogue agent chain. |
 | `agents/repository-change-detector/manifest.yaml` | Agent metadata, model configuration, inputs, outputs, and file references. |
 | `agents/repository-change-detector/instructions.md` | Core task instructions for the agent. |
 | `agents/repository-change-detector/tools.yaml` | Tool definitions and permissions used by the agent. |
@@ -76,11 +74,9 @@ The current template contains deployable Azure AI Foundry agents, including `rep
 | `agents/openapi-spec-reviewer/` | Agent source for reviewing generated OpenAPI specifications. |
 | `agents/repository-file-pr-creator/` | Agent source for creating branches, writing structured file content, and opening pull requests. |
 | `scripts/deploy-agent.py` | Deployment script that assembles the split agent files and deploys to Azure AI Foundry. |
-| `scripts/deploy-workflow.py` | Optional deployment script for a valid Azure AI Foundry CSDL workflow body. |
 | `scripts/validate-workflow.py` | Validates the source-controlled workflow manifest and referenced agents. |
 | `scripts/run-ai-source-control-workflow.py` | Runtime script that invokes the repository-change detector first, then runs OpenAPI generation and pull request creation for changed repositories. |
 | `workflows/service-catalogue/manifest.yaml` | Governance/source-control metadata for the chained workflow. |
-| `workflows/service-catalogue/workflow.yaml` | Source-authored Azure AI Foundry workflow body for the chained agent workflow. |
 | `requirements-agent-deploy.txt` | Python dependencies for local and CI deployment. |
 | `DEPLOYMENT.md` | Deployment setup, GitHub Actions secrets, and local deployment commands. |
 | `CONTRIBUTING.md` | Change-control, review, versioning, release, and retirement guidance. |
@@ -152,12 +148,6 @@ Validate the service catalogue workflow source:
 python scripts/validate-workflow.py --workflow-dir workflows/service-catalogue
 ```
 
-Deploy the source-controlled Foundry workflow body:
-
-```bash
-python scripts/deploy-workflow.py --workflow-dir workflows/service-catalogue
-```
-
 ## GitHub Actions Deployment
 
 Deployment workflows are stored at:
@@ -182,11 +172,11 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for the full deployment guide.
 
 ## Chained Workflow
 
-Use `.github/workflows/deploy-service-catalogue.workflow.yml` to validate and package the source-controlled workflow code. Run it manually with `deploy_to_foundry` enabled to deploy `workflows/service-catalogue/workflow.yaml` to Azure AI Foundry.
+Use `.github/workflows/run-service-catalogue-agent-chain.yml` to run the service catalogue chain from GitHub Actions. This calls the deployed Foundry agents one at a time from `scripts/run-ai-source-control-workflow.py`, passing only the validated JSON output needed by the next step.
 
 The workflow chain is defined in `workflows/service-catalogue/manifest.yaml`, following the same source-controlled manifest pattern as the agents.
 
-On push, the GitHub workflow uploads a `service-catalogue-workflow-code` artifact containing the workflow manifest, runtime script, validator, workflow YAML, and dependencies. Manual Foundry deployment sends `workflows/service-catalogue/workflow.yaml` to Azure AI Foundry.
+The GitHub runner uploads a `service-catalogue-agent-chain-output` artifact containing the detector output, generated specs, pull request results, and workflow summary.
 
 ## Governance Use
 

@@ -19,6 +19,7 @@ You will receive:
 2. For each repository listed in the manifest:
    - Read the repository name.
    - Read the repository URL.
+   - Derive the normalized GitHub repository identifier in `owner/name` form from the repository URL.
    - Read the manifest `latestCommit` value.
    - Check the live latest commit from the referenced GitHub repository.
 3. Include a repository in the output when:
@@ -56,7 +57,8 @@ If all repositories are up to date, return:
   "repositories": [
     {
       "repoName": "example-repo",
-      "repoURL": "https://github.com/org/example-repo"
+      "repoURL": "https://github.com/org/example-repo",
+      "repository": "org/example-repo"
     }
   ]
 }
@@ -68,3 +70,5 @@ If all repositories are up to date, return:
 - Prefer live GitHub data over previously observed or cached values.
 - If a repository cannot be checked because it is inaccessible or malformed, include it in the output so downstream validation can handle it.
 - Do not invent repository names or URLs.
+- Derive `repository` from `repoURL` by removing the `https://github.com/` prefix and any trailing `.git` suffix.
+- If `repoURL` is not a GitHub URL that can be normalized, set `repository` to the manifest `repoName`.

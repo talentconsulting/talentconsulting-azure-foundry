@@ -9,7 +9,7 @@
     ├── deploy-openai-specs-generator.agent.yml
     ├── deploy-repository-file-pr-creator.agent.yml
     ├── deploy-repository-change-detector.agent.yml
-    └── deploy-service-catalogue.workflow.yml
+    └── run-service-catalogue-agent-chain.yml
 
 agents/
 ├── openapi-spec-reviewer/
@@ -43,14 +43,12 @@ agents/
 
 scripts/
 ├── deploy-agent.py
-├── deploy-workflow.py
 ├── validate-workflow.py
 └── run-ai-source-control-workflow.py
 
 workflows/
 └── service-catalogue/
-    ├── manifest.yaml
-    └── workflow.yaml
+    └── manifest.yaml
 
 requirements-agent-deploy.txt
 ```
@@ -105,12 +103,6 @@ Validate the service catalogue workflow source:
 python scripts/validate-workflow.py --workflow-dir workflows/service-catalogue
 ```
 
-Deploy the source-controlled Foundry workflow body:
-
-```bash
-python scripts/deploy-workflow.py --workflow-dir workflows/service-catalogue
-```
-
 ## GitHub Actions Deployment
 
 The workflows must live here:
@@ -120,7 +112,7 @@ The workflows must live here:
 .github/workflows/deploy-openai-specs-generator.agent.yml
 .github/workflows/deploy-repository-change-detector.agent.yml
 .github/workflows/deploy-repository-file-pr-creator.agent.yml
-.github/workflows/deploy-service-catalogue.workflow.yml
+.github/workflows/run-service-catalogue-agent-chain.yml
 ```
 
 GitHub Actions will not discover workflows under the `agents/` folder.
@@ -216,9 +208,20 @@ Add these GitHub repository secrets:
 
 ## Automatic Deployment
 
-On push to `main`, the `.agent.yml` workflows detect changed folders under `agents/` and deploy only those agents. The `.workflow.yml` workflow detects changes under `workflows/service-catalogue/`, validates the source-controlled workflow manifest, and uploads a workflow code package artifact.
+On push to `main`, the `.agent.yml` workflows detect changed folders under `agents/` and deploy only those agents.
 
-To deploy the workflow to Azure AI Foundry, run `Deploy Service Catalogue Workflow` manually from GitHub Actions and keep `deploy_to_foundry` enabled. The deploy job uses the `dev` environment secrets and uploads the exact workflow body that was sent to Foundry as `service-catalogue-foundry-workflow`.
+## GitHub-Orchestrated Agent Chain
+
+Use `Run Service Catalogue Agent Chain` to execute the chain from GitHub Actions. This workflow invokes the deployed agents from `scripts/run-ai-source-control-workflow.py`, validates each JSON response, passes only the required JSON payload to the next agent, and uploads `service-catalogue-agent-chain-output`.
+
+Required manual inputs:
+
+| Input | Default |
+|---|---|
+| `manifest_repository` | `TalentConsulting/DomainExplorer` |
+| `manifest_path` | `repoManifest.json` |
+| `scan_path` | `.` |
+| `openapi_version` | `1.0.0` |
 
 Example changed file:
 
@@ -242,9 +245,9 @@ repository-change-detector
 
 as the `agent_name` input.
 
-## Deploying The Chained AI Workflow
+## Running The Chained AI Workflow
 
-Use the `Deploy Service Catalogue Workflow` GitHub Actions workflow to validate the source-controlled workflow manifest and upload the workflow code package artifact. For direct Azure AI Foundry deployment, manually run the same workflow with `deploy_to_foundry` enabled.
+Use the `Run Service Catalogue Agent Chain` GitHub Actions workflow to execute the source-controlled chain.
 
 The workflow source is defined in:
 
@@ -252,19 +255,11 @@ The workflow source is defined in:
 workflows/service-catalogue/manifest.yaml
 ```
 
-The deployable Azure AI Foundry workflow body is defined in:
-
-```text
-workflows/service-catalogue/workflow.yaml
-```
-
-`manifest.yaml` is the source-control/governance manifest. It is not uploaded directly to Foundry as a workflow body. `workflow.yaml` is the workflow body sent to `WorkflowAgentDefinition.workflow` for direct Azure AI Foundry workflow deployment.
-
 The workflow definition declares this sequence:
 
 1. `repository-change-detector`
 2. `openapi-spec-generator` for each repository returned by the first agent
-3. `repository-file-pr-creator` for each repository with generated OpenAPI specifications
+3. `repository-file-pr-creator` for each repository returned by the first agent
 
 ## Notes
 
