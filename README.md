@@ -176,7 +176,7 @@ Use `.github/workflows/run-service-catalogue-agent-chain.yml` to run the service
 
 The workflow chain is defined in `workflows/service-catalogue/manifest.yaml`, following the same source-controlled manifest pattern as the agents.
 
-The GitHub runner uploads a `service-catalogue-agent-chain-output` artifact containing the detector output, generated specs, pull request results, and workflow summary.
+The GitHub runner uploads a `service-catalogue-agent-chain-output` artifact containing the detector output, generator responses, generated specs, skipped repositories, pull request results, and workflow summary. If the generator returns no specs for a repository, that repository is skipped and no pull request is created for it.
 
 ## Governance Use
 

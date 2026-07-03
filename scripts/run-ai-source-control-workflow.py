@@ -324,6 +324,7 @@ def main() -> None:
         "repositories": detector_output["repositories"],
         "specs": [],
         "pullRequests": [],
+        "skipped": [],
     }
 
     for repository in detector_output["repositories"]:
@@ -350,8 +351,30 @@ def main() -> None:
             "repository": repository_ref,
             "specs": openapi_output["specs"],
             "pullRequest": None,
+            "skipped": False,
+            "skipReason": "",
         }
         workflow_output["specs"].append(repo_output)
+
+        generator_output_path = (
+            specs_dir
+            / safe_file_name(repository_name, "repository")
+            / "openapi-generator-response.json"
+        )
+        write_json(generator_output_path, openapi_output)
+
+        if not openapi_output["specs"]:
+            skip_output = {
+                "repoName": repository_name,
+                "repoURL": repository["repoURL"],
+                "repository": repository_ref,
+                "reason": "OpenAPI generator returned no specs.",
+            }
+            repo_output["skipped"] = True
+            repo_output["skipReason"] = skip_output["reason"]
+            workflow_output["skipped"].append(skip_output)
+            print(f"Skipped {repository_ref}: {skip_output['reason']}")
+            continue
 
         for spec in openapi_output["specs"]:
             file_name = safe_file_name(
@@ -405,6 +428,7 @@ def main() -> None:
 
     print(f"Repository detector returned {len(detector_output['repositories'])} repositories.")
     print(f"Generated specs for {len(workflow_output['specs'])} repositories.")
+    print(f"Skipped {len(workflow_output['skipped'])} repositories with no generated specs.")
     print(f"Created {len(workflow_output['pullRequests'])} pull request result(s).")
     print(f"Wrote workflow output to {output_dir / summary_file}")
 

@@ -212,7 +212,7 @@ On push to `main`, the `.agent.yml` workflows detect changed folders under `agen
 
 ## GitHub-Orchestrated Agent Chain
 
-Use `Run Service Catalogue Agent Chain` to execute the chain from GitHub Actions. This workflow invokes the deployed agents from `scripts/run-ai-source-control-workflow.py`, validates each JSON response, passes only the required JSON payload to the next agent, and uploads `service-catalogue-agent-chain-output`.
+Use `Run Service Catalogue Agent Chain` to execute the chain from GitHub Actions. This workflow invokes the deployed agents from `scripts/run-ai-source-control-workflow.py`, validates each JSON response, passes only the required JSON payload to the next agent, and uploads `service-catalogue-agent-chain-output`. If no OpenAPI specs are generated for a repository, the runner records the repository as skipped and does not call the pull request creator for that repository.
 
 Required manual inputs:
 
