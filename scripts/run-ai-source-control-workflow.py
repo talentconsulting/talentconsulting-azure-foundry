@@ -120,41 +120,47 @@ def validate_openapi_output(payload: dict[str, Any]) -> None:
             raise ValueError(f"specs[{index}].open-api must be a non-empty string.")
 
 
-def validate_review_output(payload: dict[str, Any]) -> None:
+def validate_pull_request_output(payload: dict[str, Any]) -> None:
     required = {
-        "domain-api",
-        "fileName",
-        "valid",
-        "severity",
-        "recommendedAction",
-        "summary",
-        "findings",
+        "success",
+        "repository",
+        "branchName",
+        "pullRequestUrl",
+        "pullRequestNumber",
+        "filesWritten",
+        "errors",
     }
     if set(payload) != required:
-        raise ValueError(f"Review response must contain only {sorted(required)}.")
-    if not isinstance(payload["domain-api"], str) or not payload["domain-api"]:
-        raise ValueError("Review response domain-api must be a non-empty string.")
-    if not isinstance(payload["fileName"], str) or not payload["fileName"]:
-        raise ValueError("Review response fileName must be a non-empty string.")
-    if not isinstance(payload["valid"], bool):
-        raise ValueError("Review response valid must be a boolean.")
-    if payload["severity"] not in {"none", "low", "medium", "high"}:
-        raise ValueError("Review response severity is invalid.")
-    if payload["recommendedAction"] not in {"accept", "review", "regenerate"}:
-        raise ValueError("Review response recommendedAction is invalid.")
-    if not isinstance(payload["summary"], str):
-        raise ValueError("Review response summary must be a string.")
-    if not isinstance(payload["findings"], list):
-        raise ValueError("Review response findings must be an array.")
+        raise ValueError(f"Pull request response must contain only {sorted(required)}.")
+    if not isinstance(payload["success"], bool):
+        raise ValueError("Pull request response success must be a boolean.")
+    if not isinstance(payload["repository"], str):
+        raise ValueError("Pull request response repository must be a string.")
+    if not isinstance(payload["branchName"], str):
+        raise ValueError("Pull request response branchName must be a string.")
+    if not isinstance(payload["pullRequestUrl"], str):
+        raise ValueError("Pull request response pullRequestUrl must be a string.")
+    if not isinstance(payload["pullRequestNumber"], int):
+        raise ValueError("Pull request response pullRequestNumber must be an integer.")
+    if not isinstance(payload["filesWritten"], list):
+        raise ValueError("Pull request response filesWritten must be an array.")
+    if not isinstance(payload["errors"], list) or not all(
+        isinstance(error, str) for error in payload["errors"]
+    ):
+        raise ValueError("Pull request response errors must be an array of strings.")
 
-    finding_required = {"category", "severity", "message", "path"}
-    for index, finding in enumerate(payload["findings"]):
-        if not isinstance(finding, dict):
-            raise ValueError(f"findings[{index}] must be an object.")
-        if set(finding) != finding_required:
-            raise ValueError(f"findings[{index}] must contain only {sorted(finding_required)}.")
-        if finding["severity"] not in {"low", "medium", "high"}:
-            raise ValueError(f"findings[{index}].severity is invalid.")
+    file_required = {"path", "action"}
+    for index, file_written in enumerate(payload["filesWritten"]):
+        if not isinstance(file_written, dict):
+            raise ValueError(f"filesWritten[{index}] must be an object.")
+        if set(file_written) != file_required:
+            raise ValueError(
+                f"filesWritten[{index}] must contain only {sorted(file_required)}."
+            )
+        if not isinstance(file_written["path"], str) or not file_written["path"]:
+            raise ValueError(f"filesWritten[{index}].path must be a non-empty string.")
+        if file_written["action"] not in {"created", "updated", "unchanged"}:
+            raise ValueError(f"filesWritten[{index}].action is invalid.")
 
 
 def invoke_agent(project: AIProjectClient, agent_name: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -170,7 +176,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "Run the AI source-control workflow: repository-change-detector first, "
-            "then OpenAPI specs generation for changed repositories."
+            "then OpenAPI specs generation and pull request creation for changed repositories."
         )
     )
     parser.add_argument(
@@ -209,9 +215,9 @@ def main() -> None:
         help="Deployed Foundry agent name for OpenAPI spec generation.",
     )
     parser.add_argument(
-        "--reviewer-agent-name",
+        "--pr-creator-agent-name",
         default=None,
-        help="Deployed Foundry agent name for reviewing generated OpenAPI specs.",
+        help="Deployed Foundry agent name for creating pull requests with generated OpenAPI specs.",
     )
     parser.add_argument(
         "--project-endpoint",
@@ -240,8 +246,8 @@ def main() -> None:
     openapi_agent_name = args.openapi_agent_name or get_agent_name(
         workflow, "openapi_specs_generator", "openapi-spec-generator"
     )
-    reviewer_agent_name = args.reviewer_agent_name or get_agent_name(
-        workflow, "openapi_spec_reviewer", "openapi-spec-reviewer"
+    pr_creator_agent_name = args.pr_creator_agent_name or get_agent_name(
+        workflow, "repository_file_pr_creator", "repository-file-pr-creator"
     )
     output_dir = Path(args.output_dir) if args.output_dir else get_output_dir(
         workflow, "outputs/ai-source-control-workflow"
@@ -250,8 +256,8 @@ def main() -> None:
     specs_dir = output_dir / get_step_value(
         workflow, "generate_openapi_specs", "output_dir", "openapi-specs"
     )
-    reviews_dir = output_dir / get_step_value(
-        workflow, "review_openapi_specs", "output_dir", "openapi-reviews"
+    pull_requests_dir = output_dir / get_step_value(
+        workflow, "create_openapi_specs_pull_request", "output_dir", "openapi-pull-requests"
     )
     detector_output_file = get_step_value(
         workflow, "detect_changed_repositories", "output", "repositories-to-update.json"
@@ -274,7 +280,7 @@ def main() -> None:
     workflow_output: dict[str, Any] = {
         "repositories": detector_output["repositories"],
         "specs": [],
-        "reviews": [],
+        "pullRequests": [],
     }
 
     for repository in detector_output["repositories"]:
@@ -295,29 +301,12 @@ def main() -> None:
             "repoURL": repository["repoURL"],
             "repository": repository_ref,
             "specs": openapi_output["specs"],
-            "reviews": [],
+            "pullRequest": None,
         }
         workflow_output["specs"].append(repo_output)
 
+        changes: list[dict[str, str]] = []
         for spec in openapi_output["specs"]:
-            review_input = {
-                "repoName": repository_name,
-                "repoURL": repository["repoURL"],
-                **spec,
-            }
-            review_output = invoke_agent(project, reviewer_agent_name, review_input)
-            validate_review_output(review_output)
-
-            repo_output["reviews"].append(review_output)
-            workflow_output["reviews"].append(
-                {
-                    "repoName": repository_name,
-                    "repoURL": repository["repoURL"],
-                    "repository": repository_ref,
-                    "review": review_output,
-                }
-            )
-
             file_name = safe_file_name(
                 spec.get("fileName", ""),
                 f"{safe_file_name(repository_name, 'repository')}-openapi.yml",
@@ -326,18 +315,47 @@ def main() -> None:
             spec_path.parent.mkdir(parents=True, exist_ok=True)
             spec_path.write_text(spec["open-api"], encoding="utf-8")
 
-            review_path = (
-                reviews_dir
-                / safe_file_name(repository_name, "repository")
-                / f"{file_name}.review.json"
+            changes.append(
+                {
+                    "filename": file_name,
+                    "content": spec["open-api"],
+                    "repository": repository_ref,
+                    "path": "openapi-specs",
+                }
             )
-            write_json(review_path, review_output)
+
+        pr_input = {
+            "changes": changes,
+            "pullRequestTitle": f"Add generated OpenAPI specs for {repository_name}",
+            "pullRequestBody": (
+                f"Generated OpenAPI specifications for {repository_name}."
+            ),
+        }
+        pr_output = invoke_agent(project, pr_creator_agent_name, pr_input)
+        validate_pull_request_output(pr_output)
+
+        repo_output["pullRequest"] = pr_output
+        workflow_output["pullRequests"].append(
+            {
+                "repoName": repository_name,
+                "repoURL": repository["repoURL"],
+                "repository": repository_ref,
+                "pullRequest": pr_output,
+            }
+        )
+
+        pr_path = (
+            pull_requests_dir
+            / safe_file_name(repository_name, "repository")
+            / "pull-request.json"
+        )
+        write_json(pr_path, pr_output)
 
     write_json(output_dir / summary_file, workflow_output)
 
     print(f"Repository detector returned {len(detector_output['repositories'])} repositories.")
     print(f"Generated specs for {len(workflow_output['specs'])} repositories.")
-    print(f"Reviewed {len(workflow_output['reviews'])} generated specs.")
+    print(f"Created {len(workflow_output['pullRequests'])} pull request result(s).")
     print(f"Wrote workflow output to {output_dir / summary_file}")
 
 

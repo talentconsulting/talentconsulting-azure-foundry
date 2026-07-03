@@ -13,6 +13,7 @@ The current template contains deployable Azure AI Foundry agents, including `rep
 │   └── workflows/
 │       ├── deploy-openapi-spec-reviewer.agent.yml
 │       ├── deploy-openai-specs-generator.agent.yml
+│       ├── deploy-repository-file-pr-creator.agent.yml
 │       ├── deploy-repository-change-detector.agent.yml
 │       └── deploy-service-catalogue.workflow.yml
 ├── agents/
@@ -30,7 +31,14 @@ The current template contains deployable Azure AI Foundry agents, including `rep
 │   │   ├── manifest.yaml
 │   │   ├── release-notes.md
 │   │   └── tools.yaml
-│   └── repository-change-detector/
+│   ├── repository-change-detector/
+│   │   ├── evaluations.md
+│   │   ├── guardrails.md
+│   │   ├── instructions.md
+│   │   ├── manifest.yaml
+│   │   ├── release-notes.md
+│   │   └── tools.yaml
+│   └── repository-file-pr-creator/
 │       ├── evaluations.md
 │       ├── guardrails.md
 │       ├── instructions.md
@@ -66,10 +74,11 @@ The current template contains deployable Azure AI Foundry agents, including `rep
 | `agents/repository-change-detector/release-notes.md` | Release history and operational notes. |
 | `agents/openapi-specs-generator/` | Agent source for generating OpenAPI specifications from API repositories. |
 | `agents/openapi-spec-reviewer/` | Agent source for reviewing generated OpenAPI specifications. |
+| `agents/repository-file-pr-creator/` | Agent source for creating branches, writing structured file content, and opening pull requests. |
 | `scripts/deploy-agent.py` | Deployment script that assembles the split agent files and deploys to Azure AI Foundry. |
 | `scripts/deploy-workflow.py` | Optional deployment script for a valid Azure AI Foundry CSDL workflow body. |
 | `scripts/validate-workflow.py` | Validates the source-controlled workflow manifest and referenced agents. |
-| `scripts/run-ai-source-control-workflow.py` | Runtime script that invokes the repository-change detector first, then runs OpenAPI generation and review for changed repositories. |
+| `scripts/run-ai-source-control-workflow.py` | Runtime script that invokes the repository-change detector first, then runs OpenAPI generation and pull request creation for changed repositories. |
 | `workflows/service-catalogue/manifest.yaml` | Governance/source-control metadata for the chained workflow. |
 | `workflows/service-catalogue/workflow.yaml` | Source-authored Azure AI Foundry workflow body for the chained agent workflow. |
 | `requirements-agent-deploy.txt` | Python dependencies for local and CI deployment. |
@@ -125,6 +134,12 @@ Or:
 python scripts/deploy-agent.py --agent-dir agents/openapi-spec-reviewer
 ```
 
+Or:
+
+```bash
+python scripts/deploy-agent.py --agent-dir agents/repository-file-pr-creator
+```
+
 Force creation of a new agent or version:
 
 ```bash
@@ -151,6 +166,7 @@ Deployment workflows are stored at:
 .github/workflows/deploy-openapi-spec-reviewer.agent.yml
 .github/workflows/deploy-openai-specs-generator.agent.yml
 .github/workflows/deploy-repository-change-detector.agent.yml
+.github/workflows/deploy-repository-file-pr-creator.agent.yml
 ```
 
 Required repository secrets:

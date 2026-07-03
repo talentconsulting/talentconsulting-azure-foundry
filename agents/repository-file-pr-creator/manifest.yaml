@@ -1,0 +1,105 @@
+name: repository-file-pr-creator
+display_name: "Repository File PR Creator"
+description: "Creates a branch, writes requested files to a GitHub repository, and opens a pull request."
+version: "1.0.0"
+
+agent:
+  object: agent.version
+  kind: prompt
+  model: gpt-5.1-codex-mini
+  reasoning:
+    effort: medium
+
+structured_inputs:
+  changes:
+    type: array
+    description: "Files to create or update. Every item must target the same repository."
+    items:
+      type: object
+      properties:
+        filename:
+          type: string
+          description: "File name to write, for example accounts-api-openapi.yml."
+        content:
+          type: string
+          description: "Complete file content to write."
+        repository:
+          type: string
+          description: "GitHub repository in owner/name or https://github.com/owner/name form."
+        path:
+          type: string
+          description: "Directory path inside the repository where the file should be written."
+      required:
+        - filename
+        - content
+        - repository
+        - path
+      additionalProperties: false
+  branchName:
+    type: string
+    required: false
+    description: "Optional branch name. If omitted, generate a deterministic source-control branch name."
+  pullRequestTitle:
+    type: string
+    required: false
+    description: "Optional pull request title."
+  pullRequestBody:
+    type: string
+    required: false
+    description: "Optional pull request body."
+
+outputs:
+  type: json_schema
+  json_schema:
+    name: repository_file_pr_result
+    strict: true
+    schema:
+      type: object
+      properties:
+        success:
+          type: boolean
+        repository:
+          type: string
+        branchName:
+          type: string
+        pullRequestUrl:
+          type: string
+        pullRequestNumber:
+          type: integer
+        filesWritten:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              action:
+                type: string
+                enum:
+                  - created
+                  - updated
+                  - unchanged
+            required:
+              - path
+              - action
+            additionalProperties: false
+        errors:
+          type: array
+          items:
+            type: string
+      required:
+        - success
+        - repository
+        - branchName
+        - pullRequestUrl
+        - pullRequestNumber
+        - filesWritten
+        - errors
+      additionalProperties: false
+
+files:
+  instructions: instructions.md
+  tools: tools.yaml
+  guardrails: guardrails.md
+  evaluations: evaluations.md
+  release_notes: release-notes.md

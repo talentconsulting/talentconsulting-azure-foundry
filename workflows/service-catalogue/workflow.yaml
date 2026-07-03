@@ -46,32 +46,27 @@ trigger:
         - kind: SetVariable
           id: set_generated_specs
           variable: Local.GeneratedSpecs
-          value: =Local.OpenApiGeneratorResponse.specs
+          value: =Local.OpenApiGeneratorResponse.'specs'
 
-        - kind: Foreach
-          id: for_each_generated_spec
-          items: =Local.GeneratedSpecs
-          value: Local.GeneratedSpec
-          actions:
-            - kind: InvokeAzureAgent
-              id: review_openapi_spec
-              agent:
-                name: openapi-spec-reviewer
-              conversationId: =System.ConversationId
-              input:
-                repoName: =Local.Repository.repoName
-                repoURL: =Local.Repository.repoURL
-                domain-api: =Local.GeneratedSpec.domain-api
-                fileName: =Local.GeneratedSpec.fileName
-                serviceName: =Local.GeneratedSpec.serviceName
-                sourcePath: =Local.GeneratedSpec.sourcePath
-                contentType: =Local.GeneratedSpec.contentType
-                open-api: =Local.GeneratedSpec.open-api
-              output:
-                autoSend: true
-                responseObject: Local.OpenApiReviewResponse
-              auth:
-                scope: service
+        - kind: SetVariable
+          id: set_generated_spec_changes
+          variable: Local.GeneratedSpecChanges
+          value: '=ForAll(Local.GeneratedSpecs, {filename: ThisRecord.fileName, content: ThisRecord.''open-api'', repository: Local.Repository.repoURL, path: "openapi-specs"})'
+
+        - kind: InvokeAzureAgent
+          id: create_openapi_specs_pull_request
+          agent:
+            name: repository-file-pr-creator
+          conversationId: =System.ConversationId
+          input:
+            changes: =Local.GeneratedSpecChanges
+            pullRequestTitle: =Concatenate("Add generated OpenAPI specs for ", Local.Repository.repoName)
+            pullRequestBody: =Concatenate("Generated OpenAPI specifications for ", Local.Repository.repoName, ".")
+          output:
+            autoSend: true
+            responseObject: Local.OpenApiPullRequestResponse
+          auth:
+            scope: service
 id: ""
 name: Service Catalogue Workflow
-description: Detect changed repositories, generate Swagger/OpenAPI specs, and review each generated spec.
+description: Detect changed repositories, generate Swagger/OpenAPI specs, and open pull requests with generated specs.

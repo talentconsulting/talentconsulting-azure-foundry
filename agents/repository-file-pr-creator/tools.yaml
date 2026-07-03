@@ -1,0 +1,26 @@
+tools:
+  - type: mcp
+    server_label: GitHub
+    server_url: https://api.githubcopilot.com/mcp
+    require_approval: never
+    project_connection_id: GitHub
+
+tool_usage:
+  github:
+    purpose: "Create branches, create or update files from structured input, and open pull requests."
+    allowed_operations:
+      - "Read repository contents"
+      - "Read default branch metadata"
+      - "Read file contents"
+      - "Create branches"
+      - "Create files"
+      - "Update files"
+      - "Create pull requests"
+    disallowed_operations:
+      - "Delete files"
+      - "Delete branches"
+      - "Merge pull requests"
+      - "Approve pull requests"
+      - "Modify repository settings"
+      - "Trigger deployments"
+      - "Write to repositories not present in the input"

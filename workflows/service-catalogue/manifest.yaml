@@ -2,7 +2,7 @@ schema_version: 1
 workflow_type: azure-ai-agent-chain
 name: service-catalogue
 display_name: "Service Catalogue Workflow"
-description: "Detect changed repositories, generate OpenAPI specifications, and review each generated spec."
+description: "Detect changed repositories, generate OpenAPI specifications, and open pull requests with generated specs."
 version: "1.0.0"
 
 environment:
@@ -43,17 +43,12 @@ agents:
       scanPath: scan_path
       openApiTitle: repoName
       openApiVersion: openapi_version
-  openapi_spec_reviewer:
-    name: openapi-spec-reviewer
+  repository_file_pr_creator:
+    name: repository-file-pr-creator
     input_map:
-      repoName: repoName
-      repoURL: repoURL
-      domain-api: domain-api
-      fileName: fileName
-      serviceName: serviceName
-      sourcePath: sourcePath
-      contentType: contentType
-      open-api: open-api
+      changes: changes
+      pullRequestTitle: pullRequestTitle
+      pullRequestBody: pullRequestBody
 
 steps:
   - id: detect_changed_repositories
@@ -63,10 +58,10 @@ steps:
     agent: openapi_specs_generator
     foreach: repositories
     output_dir: openapi-specs
-  - id: review_openapi_specs
-    agent: openapi_spec_reviewer
-    foreach: specs
-    output_dir: openapi-reviews
+  - id: create_openapi_specs_pull_request
+    agent: repository_file_pr_creator
+    foreach: repositories
+    output_dir: openapi-pull-requests
 
 outputs:
   directory: outputs/ai-source-control-workflow

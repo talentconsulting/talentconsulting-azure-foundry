@@ -7,6 +7,7 @@
 └── workflows/
     ├── deploy-openai-spec-reviewer.agent.yml
     ├── deploy-openai-specs-generator.agent.yml
+    ├── deploy-repository-file-pr-creator.agent.yml
     ├── deploy-repository-change-detector.agent.yml
     └── deploy-service-catalogue.workflow.yml
 
@@ -25,7 +26,14 @@ agents/
 │   ├── guardrails.md
 │   ├── evaluations.md
 │   └── release-notes.md
-└── repository-change-detector/
+├── repository-change-detector/
+│   ├── manifest.yaml
+│   ├── instructions.md
+│   ├── tools.yaml
+│   ├── guardrails.md
+│   ├── evaluations.md
+│   └── release-notes.md
+└── repository-file-pr-creator/
     ├── manifest.yaml
     ├── instructions.md
     ├── tools.yaml
@@ -79,6 +87,12 @@ Or:
 python scripts/deploy-agent.py --agent-dir agents/openapi-spec-reviewer
 ```
 
+Or:
+
+```bash
+python scripts/deploy-agent.py --agent-dir agents/repository-file-pr-creator
+```
+
 Force creation of a new agent/version:
 
 ```bash
@@ -105,6 +119,7 @@ The workflows must live here:
 .github/workflows/deploy-openapi-spec-reviewer.agent.yml
 .github/workflows/deploy-openai-specs-generator.agent.yml
 .github/workflows/deploy-repository-change-detector.agent.yml
+.github/workflows/deploy-repository-file-pr-creator.agent.yml
 .github/workflows/deploy-service-catalogue.workflow.yml
 ```
 
@@ -249,7 +264,7 @@ The workflow definition declares this sequence:
 
 1. `repository-change-detector`
 2. `openapi-spec-generator` for each repository returned by the first agent
-3. `openapi-spec-reviewer` for each generated OpenAPI specification
+3. `repository-file-pr-creator` for each repository with generated OpenAPI specifications
 
 ## Notes
 
