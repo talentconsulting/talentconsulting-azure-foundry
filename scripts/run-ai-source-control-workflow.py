@@ -21,6 +21,27 @@ def get_agent_name(workflow: dict[str, Any], key: str, fallback: str) -> str:
     return str(agent.get("name") or fallback)
 
 
+def load_agent_models(agents_dir: Path) -> dict[str, str]:
+    models: dict[str, str] = {}
+    for manifest_path in sorted(agents_dir.glob("*/manifest.yaml")):
+        manifest = read_yaml(manifest_path)
+        name = manifest.get("name")
+        model = manifest.get("agent", {}).get("model")
+        if isinstance(name, str) and name and isinstance(model, str) and model:
+            models[name] = model
+    return models
+
+
+def get_agent_model(agent_models: dict[str, str], agent_name: str) -> str:
+    model = agent_models.get(agent_name)
+    if not model:
+        raise ValueError(
+            f"No local agent manifest found for deployed agent '{agent_name}', "
+            "or the manifest does not declare agent.model."
+        )
+    return model
+
+
 def get_output_dir(workflow: dict[str, Any], fallback: str) -> Path:
     return Path(str(workflow.get("outputs", {}).get("directory") or fallback))
 
@@ -158,10 +179,15 @@ def validate_pull_request_output(payload: dict[str, Any]) -> None:
             raise ValueError(f"filesWritten[{index}].action is invalid.")
 
 
-def invoke_agent(project: AIProjectClient, agent_name: str, payload: dict[str, Any]) -> dict[str, Any]:
+def invoke_agent(
+    project: AIProjectClient,
+    agent_name: str,
+    model: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
     openai_client = project.get_openai_client(agent_name=agent_name)
     response = openai_client.responses.create(
-        model=agent_name,
+        model=model,
         input=json.dumps(payload, separators=(",", ":")),
     )
     return parse_json_response(extract_response_text(response))
@@ -200,6 +226,11 @@ def main() -> None:
         help="Directory containing the workflow manifest.yaml.",
     )
     parser.add_argument(
+        "--agents-dir",
+        default="agents",
+        help="Directory containing local agent manifests used to resolve deployed agent models.",
+    )
+    parser.add_argument(
         "--repository-agent-name",
         default=None,
         help="Deployed Foundry agent name for repository change detection.",
@@ -234,6 +265,7 @@ def main() -> None:
         )
 
     workflow = read_yaml(Path(args.workflow_dir) / "manifest.yaml")
+    agent_models = load_agent_models(Path(args.agents_dir))
 
     repository_agent_name = args.repository_agent_name or get_agent_name(
         workflow, "repository_change_detector", "repository-change-detector"
@@ -244,6 +276,9 @@ def main() -> None:
     pr_creator_agent_name = args.pr_creator_agent_name or get_agent_name(
         workflow, "repository_file_pr_creator", "repository-file-pr-creator"
     )
+    repository_agent_model = get_agent_model(agent_models, repository_agent_name)
+    openapi_agent_model = get_agent_model(agent_models, openapi_agent_name)
+    pr_creator_agent_model = get_agent_model(agent_models, pr_creator_agent_name)
     output_dir = Path(args.output_dir) if args.output_dir else get_output_dir(
         workflow, "outputs/ai-source-control-workflow"
     )
@@ -268,7 +303,12 @@ def main() -> None:
         "manifestRepository": args.manifest_repository,
         "manifestPath": args.manifest_path,
     }
-    detector_output = invoke_agent(project, repository_agent_name, detector_input)
+    detector_output = invoke_agent(
+        project,
+        repository_agent_name,
+        repository_agent_model,
+        detector_input,
+    )
     validate_repository_detector_output(detector_output)
     write_json(output_dir / detector_output_file, detector_output)
 
@@ -288,7 +328,12 @@ def main() -> None:
             "openApiVersion": args.openapi_version,
         }
 
-        openapi_output = invoke_agent(project, openapi_agent_name, generator_input)
+        openapi_output = invoke_agent(
+            project,
+            openapi_agent_name,
+            openapi_agent_model,
+            generator_input,
+        )
         validate_openapi_output(openapi_output)
 
         repo_output = {
@@ -318,7 +363,12 @@ def main() -> None:
                 f"Generated OpenAPI specifications for {repository_name}."
             ),
         }
-        pr_output = invoke_agent(project, pr_creator_agent_name, pr_input)
+        pr_output = invoke_agent(
+            project,
+            pr_creator_agent_name,
+            pr_creator_agent_model,
+            pr_input,
+        )
         validate_pull_request_output(pr_output)
         if not pr_output["success"]:
             errors = "; ".join(pr_output["errors"]) or "Pull request creator reported failure."
