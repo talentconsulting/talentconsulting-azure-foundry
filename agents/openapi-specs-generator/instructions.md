@@ -19,6 +19,7 @@ The agent receives the following structured inputs.
 | `repository` | GitHub repository to scan | `TalentConsulting/DomainExplorer` |
 | `scanPath` | Directory within the repository to scan | `src` |
 | `controllerPaths` | Optional explicit list of C# controller files to process | `["src/TalentSuite.Server/Bids/Controllers/BidsController.cs"]` |
+| `controllerEndpoints` | Optional explicit list of controller route/method/action records discovered by the workflow runner | `[{"sourcePath":"src/TalentSuite.Server/Bids/Controllers/BidsController.cs","method":"patch","path":"/api/bids/{bidId}/overview"}]` |
 
 Use only the current structured input for this invocation. Ignore prior workflow messages, prior agent outputs, and conversation history when deciding what to return.
 
@@ -129,6 +130,15 @@ src/TalentSuite.Server/Users/Controllers/UserInvitesController.cs
 ```
 
 then inspect all four files and return separate `specs` entries for every routable controller discovered.
+
+If `controllerEndpoints` is supplied and contains one or more entries, treat it as the minimum required endpoint inventory:
+
+- Every supplied endpoint must appear in the returned OpenAPI `paths`.
+- Match by exact `sourcePath`, HTTP `method`, and normalized `path`.
+- Group endpoints by `sourcePath`; each controller spec must include all endpoints for that controller.
+- Do not stop after the first 3 action methods in a controller.
+- Continue scanning through the end of the controller file, including action methods that appear after earlier `return Ok`, `return CreatedAtAction`, or `return BadRequest` statements.
+- For `BidsController.cs`, endpoints such as `/api/bids/{bidId}/overview`, `/api/bids/{bidId}/files`, `/api/bids/{bidId}/files/{fileId}`, and `/api/bids/{bidId}/library-push` must not be omitted when they are present in `controllerEndpoints`.
 
 For each controller:
 

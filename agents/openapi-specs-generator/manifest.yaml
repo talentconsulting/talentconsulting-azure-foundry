@@ -25,6 +25,24 @@ structured_inputs:
     items:
       type: string
     default: []
+  controllerEndpoints:
+    type: array
+    description: "Optional explicit list of C# controller endpoints discovered from route attributes by the workflow runner."
+    items:
+      type: object
+      properties:
+        sourcePath:
+          type: string
+        controllerName:
+          type: string
+        actionName:
+          type: string
+        method:
+          type: string
+        path:
+          type: string
+      additionalProperties: false
+    default: []
 
 outputs:
   type: json_schema

@@ -133,6 +133,96 @@ The response should contain separate `specs` items for the bids, users, messages
 
 The response must read every supplied controller path and return one `specs` item for each routable controller. Each spec `sourcePath` must exactly match the controller path it was generated from. It must not return only `BidsController.cs` or only controllers from the `Bids/Controllers` folder.
 
+## Evaluation 8: Complete action extraction within one controller
+
+### Input
+
+```json
+{
+  "repository": "talentconsulting/talentsuite-bidmanager",
+  "scanPath": "src/TalentSuite.Server",
+  "controllerPaths": [
+    "src/TalentSuite.Server/Bids/Controllers/BidsController.cs"
+  ],
+  "controllerEndpoints": [
+    {
+      "sourcePath": "src/TalentSuite.Server/Bids/Controllers/BidsController.cs",
+      "controllerName": "BidsController",
+      "actionName": "Create",
+      "method": "post",
+      "path": "/api/bids"
+    },
+    {
+      "sourcePath": "src/TalentSuite.Server/Bids/Controllers/BidsController.cs",
+      "controllerName": "BidsController",
+      "actionName": "Get",
+      "method": "get",
+      "path": "/api/bids/{bidId}"
+    },
+    {
+      "sourcePath": "src/TalentSuite.Server/Bids/Controllers/BidsController.cs",
+      "controllerName": "BidsController",
+      "actionName": "Get",
+      "method": "get",
+      "path": "/api/bids"
+    },
+    {
+      "sourcePath": "src/TalentSuite.Server/Bids/Controllers/BidsController.cs",
+      "controllerName": "BidsController",
+      "actionName": "SetStatus",
+      "method": "patch",
+      "path": "/api/bids/{bidId}/status"
+    },
+    {
+      "sourcePath": "src/TalentSuite.Server/Bids/Controllers/BidsController.cs",
+      "controllerName": "BidsController",
+      "actionName": "UpdateOverview",
+      "method": "patch",
+      "path": "/api/bids/{bidId}/overview"
+    },
+    {
+      "sourcePath": "src/TalentSuite.Server/Bids/Controllers/BidsController.cs",
+      "controllerName": "BidsController",
+      "actionName": "GetFiles",
+      "method": "get",
+      "path": "/api/bids/{bidId}/files"
+    },
+    {
+      "sourcePath": "src/TalentSuite.Server/Bids/Controllers/BidsController.cs",
+      "controllerName": "BidsController",
+      "actionName": "UploadFile",
+      "method": "post",
+      "path": "/api/bids/{bidId}/files"
+    },
+    {
+      "sourcePath": "src/TalentSuite.Server/Bids/Controllers/BidsController.cs",
+      "controllerName": "BidsController",
+      "actionName": "DownloadFile",
+      "method": "get",
+      "path": "/api/bids/{bidId}/files/{fileId}"
+    },
+    {
+      "sourcePath": "src/TalentSuite.Server/Bids/Controllers/BidsController.cs",
+      "controllerName": "BidsController",
+      "actionName": "DeleteFile",
+      "method": "delete",
+      "path": "/api/bids/{bidId}/files/{fileId}"
+    },
+    {
+      "sourcePath": "src/TalentSuite.Server/Bids/Controllers/BidsController.cs",
+      "controllerName": "BidsController",
+      "actionName": "PushToBidLibrary",
+      "method": "post",
+      "path": "/api/bids/{bidId}/library-push"
+    }
+  ]
+}
+```
+
+### Expected Behaviour
+
+The returned spec for `BidsController.cs` must contain all 10 supplied endpoints. It must not stop after `Create`, `Get`, and `SetStatus`. It must include later action methods such as `UpdateOverview`, `GetFiles`, `UploadFile`, `DownloadFile`, `DeleteFile`, and `PushToBidLibrary`.
+
 ## Evaluation Checks
 
 The response must:
