@@ -18,6 +18,7 @@ The agent receives the following structured inputs.
 |--------|-------------|---------|
 | `repository` | GitHub repository to scan | `TalentConsulting/DomainExplorer` |
 | `scanPath` | Directory within the repository to scan | `src` |
+| `controllerPaths` | Optional explicit list of C# controller files to process | `["src/TalentSuite.Server/Bids/Controllers/BidsController.cs"]` |
 
 Use only the current structured input for this invocation. Ignore prior workflow messages, prior agent outputs, and conversation history when deciding what to return.
 
@@ -105,6 +106,29 @@ Controller folders may appear directly under `scanPath` or under domain feature 
 - `*/*/Controllers/**/*.cs`
 
 Do not stop after the first controller folder is found. If `Bids/Controllers` is found, continue searching sibling folders such as `Users/Controllers`, `Messages/Controllers`, `Authentication/Controllers`, and any other `Controllers` directories under the scan path.
+
+If `controllerPaths` is supplied and contains one or more paths, treat it as the authoritative controller inventory for this invocation:
+
+- Read every path in `controllerPaths`.
+- Do not perform a narrower search that only reads the first domain folder.
+- Do not drop sibling controller paths such as `Users/Controllers` after reading `Bids/Controllers`.
+- Generate a spec for every controller path that contains at least one routable action.
+- If a controller path cannot be read, continue with the other paths and omit only the unreadable path.
+- Never return just the first controller when multiple `controllerPaths` entries are supplied.
+- Set each returned spec `sourcePath` to the exact controller file path from `controllerPaths`.
+- Return at most one spec per controller path.
+- Use a unique `fileName` for each controller, derived from that controller name.
+
+For example, if `controllerPaths` contains:
+
+```text
+src/TalentSuite.Server/Bids/Controllers/BidsController.cs
+src/TalentSuite.Server/Bids/Controllers/BidDocumentController.cs
+src/TalentSuite.Server/Users/Controllers/UsersController.cs
+src/TalentSuite.Server/Users/Controllers/UserInvitesController.cs
+```
+
+then inspect all four files and return separate `specs` entries for every routable controller discovered.
 
 For each controller:
 

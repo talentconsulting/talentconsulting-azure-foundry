@@ -112,6 +112,27 @@ src/TalentSuite.Server/
 
 The response should contain separate `specs` items for the bids, users, messages, and auth controllers. It must not stop after `Bids/Controllers`; it must continue scanning sibling domain folders such as `Users/Controllers`. It must not return a single generic `talentsuite-api` spec when multiple controllers are present.
 
+## Evaluation 7: Explicit controller path inventory
+
+### Input
+
+```json
+{
+  "repository": "talentconsulting/talentsuite-bidmanager",
+  "scanPath": "src/TalentSuite.Server",
+  "controllerPaths": [
+    "src/TalentSuite.Server/Bids/Controllers/BidsController.cs",
+    "src/TalentSuite.Server/Bids/Controllers/BidDocumentController.cs",
+    "src/TalentSuite.Server/Users/Controllers/UsersController.cs",
+    "src/TalentSuite.Server/Users/Controllers/UserInvitesController.cs"
+  ]
+}
+```
+
+### Expected Behaviour
+
+The response must read every supplied controller path and return one `specs` item for each routable controller. Each spec `sourcePath` must exactly match the controller path it was generated from. It must not return only `BidsController.cs` or only controllers from the `Bids/Controllers` folder.
+
 ## Evaluation Checks
 
 The response must:
@@ -124,6 +145,7 @@ The response must:
 - Include `fileName`.
 - Include `contentType` as `application/json`.
 - Return `open-api` as a JSON object, not a string.
+- Set `sourcePath` to the controller file path used to generate the spec.
 - Contain valid OpenAPI JSON.
 - Contain no markdown outside the JSON response.
 - Contain no additional JSON properties.

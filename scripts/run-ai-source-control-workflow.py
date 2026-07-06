@@ -2,6 +2,9 @@ import argparse
 import json
 import os
 import re
+import urllib.error
+import urllib.parse
+import urllib.request
 import uuid
 from pathlib import Path
 from typing import Any
@@ -140,6 +143,56 @@ def same_repository(left: str, right: str) -> bool:
     return normalize_repository_ref(left).lower() == normalize_repository_ref(right).lower()
 
 
+def github_api_get_json(url: str) -> Any:
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "ai-source-control-workflow",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    token = os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    request = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def discover_controller_paths(repository: str, scan_path: str) -> list[str]:
+    repository_ref = normalize_repository_ref(repository)
+    repository_url_part = urllib.parse.quote(repository_ref, safe="/")
+    repo_metadata = github_api_get_json(f"https://api.github.com/repos/{repository_url_part}")
+    default_branch = repo_metadata.get("default_branch") or "main"
+    tree_url = (
+        f"https://api.github.com/repos/{repository_url_part}/git/trees/"
+        f"{urllib.parse.quote(default_branch, safe='')}?recursive=1"
+    )
+    tree_payload = github_api_get_json(tree_url)
+    tree = tree_payload.get("tree")
+    if not isinstance(tree, list):
+        raise ValueError(f"GitHub tree response for {repository_ref} did not contain a tree array.")
+
+    prefix = f"{scan_path}/" if scan_path else ""
+    controller_paths: list[str] = []
+    for item in tree:
+        if not isinstance(item, dict) or item.get("type") != "blob":
+            continue
+        path = item.get("path")
+        if not isinstance(path, str):
+            continue
+        if prefix and not path.startswith(prefix):
+            continue
+        if not path.endswith(".cs"):
+            continue
+        if "/Controllers/" not in f"/{path}":
+            continue
+        if not Path(path).name.endswith("Controller.cs"):
+            continue
+        controller_paths.append(path)
+
+    return sorted(controller_paths)
+
+
 def validate_repository_detector_output(payload: dict[str, Any]) -> None:
     repositories = payload.get("repositories")
     if not isinstance(repositories, list):
@@ -160,12 +213,16 @@ def validate_repository_detector_output(payload: dict[str, Any]) -> None:
             raise ValueError(f"repositories[{index}].repository must be a non-empty string.")
 
 
-def validate_openapi_output(payload: dict[str, Any]) -> None:
+def validate_openapi_output(
+    payload: dict[str, Any],
+    expected_controller_paths: list[str] | None = None,
+) -> None:
     specs = payload.get("specs")
     if not isinstance(specs, list):
         raise ValueError("OpenAPI generator response must contain a specs array.")
 
     required = {"domain-api", "open-api", "fileName", "serviceName", "sourcePath", "contentType"}
+    returned_source_paths: set[str] = set()
     for index, spec in enumerate(specs):
         if not isinstance(spec, dict):
             raise ValueError(f"specs[{index}] must be an object.")
@@ -181,6 +238,24 @@ def validate_openapi_output(payload: dict[str, Any]) -> None:
         paths = openapi_document.get("paths")
         if not isinstance(paths, dict) or not paths:
             raise ValueError(f"specs[{index}].open-api.paths must be a non-empty object.")
+        if not isinstance(spec["sourcePath"], str) or not spec["sourcePath"]:
+            raise ValueError(f"specs[{index}].sourcePath must be a non-empty string.")
+        returned_source_paths.add(spec["sourcePath"])
+
+    if expected_controller_paths:
+        expected_paths = set(expected_controller_paths)
+        unknown_paths = sorted(returned_source_paths - expected_paths)
+        if unknown_paths:
+            raise ValueError(
+                "OpenAPI generator returned specs for paths outside the supplied "
+                f"controller inventory: {', '.join(unknown_paths)}"
+            )
+        missing_paths = sorted(expected_paths - returned_source_paths)
+        if missing_paths:
+            raise ValueError(
+                "OpenAPI generator did not return specs for every supplied controller path. "
+                f"Missing: {', '.join(missing_paths)}"
+            )
 
 
 def validate_pull_request_output(
@@ -411,9 +486,17 @@ def main() -> None:
         repository_name = repository["repoName"]
         repository_ref = repository["repository"]
         repository_output_dir = safe_file_name(repository_ref.replace("/", "-"), "repository")
+        try:
+            controller_paths = discover_controller_paths(repository_ref, scan_path)
+        except (urllib.error.URLError, TimeoutError, ValueError) as error:
+            controller_paths = []
+            print(f"Warning: failed to pre-scan controller paths for {repository_ref}: {error}")
+
+        print(f"Discovered {len(controller_paths)} controller path(s) for {repository_ref}.")
         generator_input = {
             "repository": repository_ref,
             "scanPath": scan_path,
+            "controllerPaths": controller_paths,
         }
 
         openapi_output = invoke_agent(
@@ -422,13 +505,14 @@ def main() -> None:
             openapi_agent_model,
             generator_input,
         )
-        validate_openapi_output(openapi_output)
+        validate_openapi_output(openapi_output, expected_controller_paths=controller_paths)
 
         repo_output = {
             "repoName": repository_name,
             "repoURL": repository["repoURL"],
             "repository": repository_ref,
             "pullRequestRepository": manifest_repository_ref,
+            "controllerPaths": controller_paths,
             "specs": openapi_output["specs"],
             "pullRequest": None,
             "skipped": False,

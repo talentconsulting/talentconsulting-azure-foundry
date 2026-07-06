@@ -19,6 +19,12 @@ structured_inputs:
     type: string
     description: "File or directory path to scan for C# ASP.NET Core controllers, for example src/My.Api"
     default: "."
+  controllerPaths:
+    type: array
+    description: "Optional explicit list of C# controller file paths discovered by the workflow runner."
+    items:
+      type: string
+    default: []
 
 outputs:
   type: json_schema
