@@ -91,12 +91,27 @@ Read:
 - Startup.cs
 - Controllers
 - Endpoint registration
+- Endpoint extension methods
 - Route attributes
 - DTOs
 - Records
 - Validators
 - Middleware
 - Authentication configuration
+
+For ASP.NET Core and Minimal APIs, do not stop after reading `Program.cs` or `Startup.cs`. Trace endpoint registration into extension methods and feature folders. Search for and inspect all files containing:
+
+- `MapGet`, `MapPost`, `MapPut`, `MapPatch`, `MapDelete`, `MapMethods`
+- `MapGroup`, `MapControllerRoute`, `MapControllers`
+- `IEndpointRouteBuilder`
+- `RouteGroupBuilder`
+- `ControllerBase`
+- `[ApiController]`, `[Route]`, `[HttpGet]`, `[HttpPost]`, `[HttpPut]`, `[HttpPatch]`, `[HttpDelete]`
+- `ICarterModule`, `MapCarter`
+- `Endpoint<`, `FastEndpoints`
+- `FunctionName`, `HttpTrigger`
+
+When `Program.cs` calls methods such as `MapEndpoints`, `MapApi`, `RegisterEndpoints`, `UseEndpoints`, or project-specific extension methods, read those extension method implementations before deciding which endpoints exist.
 
 ---
 
@@ -157,6 +172,10 @@ Read:
 # API Discovery
 
 Every independent API must generate its own OpenAPI specification.
+
+Before generating a specification, build an endpoint inventory from the source files. The inventory must include every discovered route template, HTTP method, handler/controller/function name, and source file path. Use that inventory to generate `paths`.
+
+Do not return a specification containing only `/`, `/health`, `/swagger`, or other infrastructure endpoints when the scanned source contains controllers, route attributes, `Map*` calls, endpoint modules, or HTTP-triggered functions elsewhere. In that situation, continue scanning until application endpoints are included. If the repository contains application endpoints but they cannot be safely represented, return `{"specs":[]}` rather than a misleading partial spec.
 
 Example repository:
 

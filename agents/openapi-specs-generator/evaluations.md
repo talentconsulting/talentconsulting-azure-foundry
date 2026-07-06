@@ -68,6 +68,32 @@ public IActionResult GetSecureResource()
 
 The YAML should include a security scheme when authentication can be identified.
 
+## Evaluation 5: Minimal API endpoints in extension methods
+
+### Source Pattern
+
+```csharp
+app.MapGet("/", () => Results.Redirect("/health"));
+app.MapGet("/health", () => Results.Ok());
+app.MapBidEndpoints();
+
+public static class BidEndpoints
+{
+    public static IEndpointRouteBuilder MapBidEndpoints(this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/bids");
+        group.MapGet("/", GetBids);
+        group.MapGet("/{id}", GetBid);
+        group.MapPost("/", CreateBid);
+        return app;
+    }
+}
+```
+
+### Expected Behaviour
+
+The YAML must include `/api/bids`, `/api/bids/{id}`, and their HTTP methods. It must not return only `/` and `/health`.
+
 ## Evaluation Checks
 
 The response must:
