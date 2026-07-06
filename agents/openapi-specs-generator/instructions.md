@@ -18,8 +18,8 @@ The agent receives the following structured inputs.
 |--------|-------------|---------|
 | `repository` | GitHub repository to scan | `TalentConsulting/DomainExplorer` |
 | `scanPath` | Directory within the repository to scan | `src` |
-| `controllerPaths` | Optional explicit list of C# controller files to process | `["src/TalentSuite.Server/Bids/Controllers/BidsController.cs"]` |
-| `controllerEndpoints` | Optional explicit list of controller route/method/action records discovered by the workflow runner | `[{"sourcePath":"src/TalentSuite.Server/Bids/Controllers/BidsController.cs","method":"patch","path":"/api/bids/{bidId}/overview"}]` |
+| `controllerPaths` | Optional explicit list of C# controller files to process | `["src/My.Api/Orders/Controllers/OrdersController.cs"]` |
+| `controllerEndpoints` | Optional explicit list of controller route/method/action records discovered by the workflow runner | `[{"sourcePath":"src/My.Api/Orders/Controllers/OrdersController.cs","method":"patch","path":"/api/orders/{orderId}/status"}]` |
 
 Use only the current structured input for this invocation. Ignore prior workflow messages, prior agent outputs, and conversation history when deciding what to return.
 
@@ -106,13 +106,13 @@ Controller folders may appear directly under `scanPath` or under domain feature 
 - `*/Controllers/**/*.cs`
 - `*/*/Controllers/**/*.cs`
 
-Do not stop after the first controller folder is found. If `Bids/Controllers` is found, continue searching sibling folders such as `Users/Controllers`, `Messages/Controllers`, `Authentication/Controllers`, and any other `Controllers` directories under the scan path.
+Do not stop after the first controller folder is found. If one `Controllers` directory is found, continue searching sibling feature folders and any other `Controllers` directories under the scan path.
 
 If `controllerPaths` is supplied and contains one or more paths, treat it as the authoritative controller inventory for this invocation:
 
 - Read every path in `controllerPaths`.
 - Do not perform a narrower search that only reads the first domain folder.
-- Do not drop sibling controller paths such as `Users/Controllers` after reading `Bids/Controllers`.
+- Do not drop sibling controller paths after reading the first controller path or first feature folder.
 - Generate a spec for every controller path that contains at least one routable action.
 - If a controller path cannot be read, continue with the other paths and omit only the unreadable path.
 - Never return just the first controller when multiple `controllerPaths` entries are supplied.
@@ -123,10 +123,10 @@ If `controllerPaths` is supplied and contains one or more paths, treat it as the
 For example, if `controllerPaths` contains:
 
 ```text
-src/TalentSuite.Server/Bids/Controllers/BidsController.cs
-src/TalentSuite.Server/Bids/Controllers/BidDocumentController.cs
-src/TalentSuite.Server/Users/Controllers/UsersController.cs
-src/TalentSuite.Server/Users/Controllers/UserInvitesController.cs
+src/My.Api/Orders/Controllers/OrdersController.cs
+src/My.Api/Orders/Controllers/OrderDocumentsController.cs
+src/My.Api/Customers/Controllers/CustomersController.cs
+src/My.Api/Invoices/Controllers/InvoicesController.cs
 ```
 
 then inspect all four files and return separate `specs` entries for every routable controller discovered.
@@ -138,7 +138,7 @@ If `controllerEndpoints` is supplied and contains one or more entries, treat it 
 - Group endpoints by `sourcePath`; each controller spec must include all endpoints for that controller.
 - Do not stop after the first 3 action methods in a controller.
 - Continue scanning through the end of the controller file, including action methods that appear after earlier `return Ok`, `return CreatedAtAction`, or `return BadRequest` statements.
-- For `BidsController.cs`, endpoints such as `/api/bids/{bidId}/overview`, `/api/bids/{bidId}/files`, `/api/bids/{bidId}/files/{fileId}`, and `/api/bids/{bidId}/library-push` must not be omitted when they are present in `controllerEndpoints`.
+- Endpoints that appear later in the controller file must not be omitted when they are present in `controllerEndpoints`.
 
 For each controller:
 
@@ -171,23 +171,23 @@ Derive each OpenAPI `info.title` from the discovered controller or service name.
 For example, a single ASP.NET Core server project may contain multiple controllers:
 
 ```text
-src/TalentSuite.Server/
-  Bids/Controllers/BidsController.cs
-  Users/Controllers/UsersController.cs
-  Messages/Controllers/MessagesController.cs
+src/My.Api/
+  Orders/Controllers/OrdersController.cs
+  Customers/Controllers/CustomersController.cs
+  Invoices/Controllers/InvoicesController.cs
   Authentication/Controllers/AuthenticationController.cs
 ```
 
 Return separate specs such as:
 
 ```text
-bid-manager-bids-openapi.json
-bid-manager-users-openapi.json
-bid-manager-messages-openapi.json
-bid-manager-authentication-openapi.json
+orders-openapi.json
+customers-openapi.json
+invoices-openapi.json
+authentication-openapi.json
 ```
 
-Returning a single generic `talentsuite-api` spec is not acceptable when multiple controllers are present.
+Returning a single generic repository-level spec is not acceptable when multiple controllers are present.
 
 Example repository:
 

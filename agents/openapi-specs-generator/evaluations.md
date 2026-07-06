@@ -89,7 +89,7 @@ The OpenAPI JSON object should include a security scheme when authentication can
 ```csharp
 app.MapGet("/", () => Results.Redirect("/health"));
 app.MapGet("/health", () => Results.Ok());
-app.MapBidEndpoints();
+app.MapOrderEndpoints();
 ```
 
 ### Expected Behaviour
@@ -101,16 +101,16 @@ Return `{"specs":[]}` when no controller classes are present. Do not generate sp
 ### Source Pattern
 
 ```text
-src/TalentSuite.Server/
-  Bids/Controllers/BidsController.cs
-  Users/Controllers/UsersController.cs
-  Messages/Controllers/MessagesController.cs
+src/My.Api/
+  Orders/Controllers/OrdersController.cs
+  Customers/Controllers/CustomersController.cs
+  Invoices/Controllers/InvoicesController.cs
   Auth/Controllers/AuthController.cs
 ```
 
 ### Expected Behaviour
 
-The response should contain separate `specs` items for the bids, users, messages, and auth controllers. It must not stop after `Bids/Controllers`; it must continue scanning sibling domain folders such as `Users/Controllers`. It must not return a single generic `talentsuite-api` spec when multiple controllers are present.
+The response should contain separate `specs` items for the orders, customers, invoices, and auth controllers. It must not stop after the first `Controllers` directory; it must continue scanning sibling domain folders. It must not return a single generic repository-level spec when multiple controllers are present.
 
 ## Evaluation 7: Explicit controller path inventory
 
@@ -118,20 +118,20 @@ The response should contain separate `specs` items for the bids, users, messages
 
 ```json
 {
-  "repository": "talentconsulting/talentsuite-bidmanager",
-  "scanPath": "src/TalentSuite.Server",
+  "repository": "example/example-api",
+  "scanPath": "src/My.Api",
   "controllerPaths": [
-    "src/TalentSuite.Server/Bids/Controllers/BidsController.cs",
-    "src/TalentSuite.Server/Bids/Controllers/BidDocumentController.cs",
-    "src/TalentSuite.Server/Users/Controllers/UsersController.cs",
-    "src/TalentSuite.Server/Users/Controllers/UserInvitesController.cs"
+    "src/My.Api/Orders/Controllers/OrdersController.cs",
+    "src/My.Api/Orders/Controllers/OrderDocumentsController.cs",
+    "src/My.Api/Customers/Controllers/CustomersController.cs",
+    "src/My.Api/Invoices/Controllers/InvoicesController.cs"
   ]
 }
 ```
 
 ### Expected Behaviour
 
-The response must read every supplied controller path and return one `specs` item for each routable controller. Each spec `sourcePath` must exactly match the controller path it was generated from. It must not return only `BidsController.cs` or only controllers from the `Bids/Controllers` folder.
+The response must read every supplied controller path and return one `specs` item for each routable controller. Each spec `sourcePath` must exactly match the controller path it was generated from. It must not return only the first controller or only controllers from the first feature folder.
 
 ## Evaluation 8: Complete action extraction within one controller
 
@@ -139,81 +139,81 @@ The response must read every supplied controller path and return one `specs` ite
 
 ```json
 {
-  "repository": "talentconsulting/talentsuite-bidmanager",
-  "scanPath": "src/TalentSuite.Server",
+  "repository": "example/example-api",
+  "scanPath": "src/My.Api",
   "controllerPaths": [
-    "src/TalentSuite.Server/Bids/Controllers/BidsController.cs"
+    "src/My.Api/Orders/Controllers/OrdersController.cs"
   ],
   "controllerEndpoints": [
     {
-      "sourcePath": "src/TalentSuite.Server/Bids/Controllers/BidsController.cs",
-      "controllerName": "BidsController",
+      "sourcePath": "src/My.Api/Orders/Controllers/OrdersController.cs",
+      "controllerName": "OrdersController",
       "actionName": "Create",
       "method": "post",
-      "path": "/api/bids"
+      "path": "/api/orders"
     },
     {
-      "sourcePath": "src/TalentSuite.Server/Bids/Controllers/BidsController.cs",
-      "controllerName": "BidsController",
+      "sourcePath": "src/My.Api/Orders/Controllers/OrdersController.cs",
+      "controllerName": "OrdersController",
       "actionName": "Get",
       "method": "get",
-      "path": "/api/bids/{bidId}"
+      "path": "/api/orders/{orderId}"
     },
     {
-      "sourcePath": "src/TalentSuite.Server/Bids/Controllers/BidsController.cs",
-      "controllerName": "BidsController",
-      "actionName": "Get",
+      "sourcePath": "src/My.Api/Orders/Controllers/OrdersController.cs",
+      "controllerName": "OrdersController",
+      "actionName": "Search",
       "method": "get",
-      "path": "/api/bids"
+      "path": "/api/orders"
     },
     {
-      "sourcePath": "src/TalentSuite.Server/Bids/Controllers/BidsController.cs",
-      "controllerName": "BidsController",
+      "sourcePath": "src/My.Api/Orders/Controllers/OrdersController.cs",
+      "controllerName": "OrdersController",
       "actionName": "SetStatus",
       "method": "patch",
-      "path": "/api/bids/{bidId}/status"
+      "path": "/api/orders/{orderId}/status"
     },
     {
-      "sourcePath": "src/TalentSuite.Server/Bids/Controllers/BidsController.cs",
-      "controllerName": "BidsController",
-      "actionName": "UpdateOverview",
+      "sourcePath": "src/My.Api/Orders/Controllers/OrdersController.cs",
+      "controllerName": "OrdersController",
+      "actionName": "UpdateDetails",
       "method": "patch",
-      "path": "/api/bids/{bidId}/overview"
+      "path": "/api/orders/{orderId}/details"
     },
     {
-      "sourcePath": "src/TalentSuite.Server/Bids/Controllers/BidsController.cs",
-      "controllerName": "BidsController",
-      "actionName": "GetFiles",
+      "sourcePath": "src/My.Api/Orders/Controllers/OrdersController.cs",
+      "controllerName": "OrdersController",
+      "actionName": "GetDocuments",
       "method": "get",
-      "path": "/api/bids/{bidId}/files"
+      "path": "/api/orders/{orderId}/documents"
     },
     {
-      "sourcePath": "src/TalentSuite.Server/Bids/Controllers/BidsController.cs",
-      "controllerName": "BidsController",
-      "actionName": "UploadFile",
+      "sourcePath": "src/My.Api/Orders/Controllers/OrdersController.cs",
+      "controllerName": "OrdersController",
+      "actionName": "UploadDocument",
       "method": "post",
-      "path": "/api/bids/{bidId}/files"
+      "path": "/api/orders/{orderId}/documents"
     },
     {
-      "sourcePath": "src/TalentSuite.Server/Bids/Controllers/BidsController.cs",
-      "controllerName": "BidsController",
-      "actionName": "DownloadFile",
+      "sourcePath": "src/My.Api/Orders/Controllers/OrdersController.cs",
+      "controllerName": "OrdersController",
+      "actionName": "DownloadDocument",
       "method": "get",
-      "path": "/api/bids/{bidId}/files/{fileId}"
+      "path": "/api/orders/{orderId}/documents/{documentId}"
     },
     {
-      "sourcePath": "src/TalentSuite.Server/Bids/Controllers/BidsController.cs",
-      "controllerName": "BidsController",
-      "actionName": "DeleteFile",
+      "sourcePath": "src/My.Api/Orders/Controllers/OrdersController.cs",
+      "controllerName": "OrdersController",
+      "actionName": "DeleteDocument",
       "method": "delete",
-      "path": "/api/bids/{bidId}/files/{fileId}"
+      "path": "/api/orders/{orderId}/documents/{documentId}"
     },
     {
-      "sourcePath": "src/TalentSuite.Server/Bids/Controllers/BidsController.cs",
-      "controllerName": "BidsController",
-      "actionName": "PushToBidLibrary",
+      "sourcePath": "src/My.Api/Orders/Controllers/OrdersController.cs",
+      "controllerName": "OrdersController",
+      "actionName": "Submit",
       "method": "post",
-      "path": "/api/bids/{bidId}/library-push"
+      "path": "/api/orders/{orderId}/submit"
     }
   ]
 }
@@ -221,7 +221,7 @@ The response must read every supplied controller path and return one `specs` ite
 
 ### Expected Behaviour
 
-The returned spec for `BidsController.cs` must contain all 10 supplied endpoints. It must not stop after `Create`, `Get`, and `SetStatus`. It must include later action methods such as `UpdateOverview`, `GetFiles`, `UploadFile`, `DownloadFile`, `DeleteFile`, and `PushToBidLibrary`.
+The returned spec for `OrdersController.cs` must contain all 10 supplied endpoints. It must not stop after `Create`, `Get`, and `SetStatus`. It must include later action methods such as `UpdateDetails`, `GetDocuments`, `UploadDocument`, `DownloadDocument`, `DeleteDocument`, and `Submit`.
 
 ## Evaluation Checks
 
