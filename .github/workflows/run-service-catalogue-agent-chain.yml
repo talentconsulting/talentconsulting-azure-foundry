@@ -6,7 +6,6 @@ on:
       manifest_repository:
         description: "Repository containing the source-control manifest."
         required: true
-        default: "TalentConsulting/DomainExplorer"
       manifest_path:
         description: "Path to the source-control manifest in the repository."
         required: true
