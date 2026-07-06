@@ -220,6 +220,7 @@ def invoke_agent(
     model: str,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
+    print(f"Invoking {agent_name} with model {model}.")
     openai_client = project.get_openai_client(agent_name=agent_name)
     response = openai_client.responses.create(
         model=model,

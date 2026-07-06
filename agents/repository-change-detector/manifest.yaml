@@ -6,7 +6,7 @@ version: "1.0.0"
 agent:
   object: agent.version
   kind: prompt
-  model: gpt-5.1-codex-mini
+  model: gpt-4o
   reasoning:
     effort: low
 
