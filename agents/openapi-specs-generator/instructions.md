@@ -2,11 +2,11 @@
 
 ## Purpose
 
-You scan a GitHub repository and generate **one OpenAPI 3.1 specification for every API discovered**.
+You scan a GitHub repository and generate **one OpenAPI 3.1 specification for every ASP.NET Core C# controller discovered**.
 
 The generated specifications are returned as an array of YAML documents so that downstream workflow steps can write each specification to a separate `.yml` file.
 
-The agent is intended to work across repositories containing multiple services, including microservices, Azure Functions, ASP.NET Core Web APIs, Minimal APIs, REST services, and other HTTP-based applications.
+The agent is intended only for .NET/C# ASP.NET Core Web API repositories that expose endpoints through controller classes and route attributes.
 
 ---
 
@@ -34,7 +34,7 @@ When the source code does not expose an API version, use `3.1.0` as the generate
 
 # Objective
 
-Discover every HTTP API contained within the supplied repository path and generate a separate OpenAPI specification for every API discovered.
+Discover every ASP.NET Core C# controller contained within the supplied repository path and generate a separate OpenAPI specification for every controller discovered.
 
 Each specification must be complete, independently usable and suitable for publishing directly to an API gateway or developer portal.
 
@@ -67,125 +67,100 @@ Ignore the following folders:
 
 ---
 
-# Supported Technologies
+# Supported Technology
 
-Support all common API frameworks.
+Support only .NET/C# ASP.NET Core controllers.
 
-## .NET
+Do not generate specs from:
 
-Inspect:
-
-- ASP.NET Core Controllers
 - Minimal APIs
-- Azure Functions (HTTP Trigger)
+- Azure Functions
 - FastEndpoints
 - Carter
-- Endpoint Routing
-- Swagger configuration
-- Swashbuckle
-- NSwag
+- Node / TypeScript frameworks
+- Python frameworks
+- Java frameworks
+- Health checks, redirects, Swagger endpoints, or other infrastructure-only routes
 
 Read:
 
-- Program.cs
-- Startup.cs
-- Controllers
-- Endpoint registration
-- Endpoint extension methods
+- C# controller files
 - Route attributes
 - DTOs
 - Records
 - Validators
-- Middleware
 - Authentication configuration
 
-For ASP.NET Core and Minimal APIs, do not stop after reading `Program.cs` or `Startup.cs`. Trace endpoint registration into extension methods and feature folders. Search for and inspect all files containing:
+Find controller files by searching recursively under `scanPath` for `.cs` files containing:
 
-- `MapGet`, `MapPost`, `MapPut`, `MapPatch`, `MapDelete`, `MapMethods`
-- `MapGroup`, `MapControllerRoute`, `MapControllers`
-- `IEndpointRouteBuilder`
-- `RouteGroupBuilder`
 - `ControllerBase`
 - `[ApiController]`, `[Route]`, `[HttpGet]`, `[HttpPost]`, `[HttpPut]`, `[HttpPatch]`, `[HttpDelete]`
-- `ICarterModule`, `MapCarter`
-- `Endpoint<`, `FastEndpoints`
-- `FunctionName`, `HttpTrigger`
+- class names ending in `Controller`
 
-When `Program.cs` calls methods such as `MapEndpoints`, `MapApi`, `RegisterEndpoints`, `UseEndpoints`, or project-specific extension methods, read those extension method implementations before deciding which endpoints exist.
+Controller folders may appear directly under `scanPath` or under domain feature folders. Search all matching paths, including:
 
----
+- `Controllers/**/*.cs`
+- `*/Controllers/**/*.cs`
+- `*/*/Controllers/**/*.cs`
 
-## Node / TypeScript
+Do not stop after the first controller folder is found. If `Bids/Controllers` is found, continue searching sibling folders such as `Users/Controllers`, `Messages/Controllers`, `Authentication/Controllers`, and any other `Controllers` directories under the scan path.
 
-Inspect:
+For each controller:
 
-- Express
-- Fastify
-- NestJS
-- Hono
-- Koa
+- Read class-level route attributes.
+- Read method-level HTTP verb attributes.
+- Combine class-level and method-level route templates.
+- Infer path parameters from route templates.
+- Infer request bodies from action parameters.
+- Infer response schemas from action return types where possible.
+- Read DTOs, records, enums, and models referenced by the controller.
 
-Read:
-
-- Routers
-- Controllers
-- DTOs
-- Validation
-- OpenAPI decorators
-
----
-
-## Python
-
-Inspect:
-
-- FastAPI
-- Flask
-- Django REST Framework
-
-Read:
-
-- Route decorators
-- Pydantic models
-- Serializers
-
----
-
-## Java
-
-Inspect:
-
-- Spring Boot
-- JAX-RS
-
-Read:
-
-- RestController
-- RequestMapping
-- GetMapping
-- PostMapping
-- DTOs
-- Validation annotations
+If no controller files are found, return `{"specs":[]}`. Do not fall back to Minimal API, health check, root redirect, or non-controller routes.
 
 ---
 
 # API Discovery
 
-Every independent API must generate its own OpenAPI specification.
+Every controller must generate its own OpenAPI specification.
 
-Before generating a specification, build an endpoint inventory from the source files. The inventory must include every discovered route template, HTTP method, handler/controller/function name, and source file path. Use that inventory to generate `paths`.
+Before generating a specification, build an endpoint inventory from the controller source files. The inventory must include every discovered route template, HTTP method, controller name, action method name, and source file path. Use that inventory to generate `paths`. If controller endpoints are discovered, they must appear in the returned OpenAPI YAML.
 
-Do not return a specification containing only `/`, `/health`, `/swagger`, or other infrastructure endpoints when the scanned source contains controllers, route attributes, `Map*` calls, endpoint modules, or HTTP-triggered functions elsewhere. In that situation, continue scanning until application endpoints are included. If the repository contains application endpoints but they cannot be safely represented, return `{"specs":[]}` rather than a misleading partial spec.
+Do not return a spec unless the OpenAPI YAML contains a non-empty `paths` object with at least one controller endpoint. A document with only `info`, `servers`, `tags`, `security`, or `components` is incomplete. Return `{"specs":[]}` only when repository access fails, the scan path cannot be read, or no controller classes with route/action attributes are found after searching the source.
+
+Do not return a specification containing only `/`, `/health`, `/swagger`, or other infrastructure endpoints. Ignore infrastructure-only endpoints. If controller endpoints are discovered but details such as request/response schemas are incomplete, still include the endpoint paths and methods with conservative summaries and response descriptions.
+
+Do not collapse multiple controllers into one generic repository-level spec. Return one `specs` item per controller. Use the controller name as the domain API identifier and service name.
+
+For example, a single ASP.NET Core server project may contain multiple controllers:
+
+```text
+src/TalentSuite.Server/
+  Bids/Controllers/BidsController.cs
+  Users/Controllers/UsersController.cs
+  Messages/Controllers/MessagesController.cs
+  Authentication/Controllers/AuthenticationController.cs
+```
+
+Return separate specs such as:
+
+```text
+bid-manager-bids-openapi.yml
+bid-manager-users-openapi.yml
+bid-manager-messages-openapi.yml
+bid-manager-authentication-openapi.yml
+```
+
+Returning a single generic `talentsuite-api` spec is not acceptable when multiple controllers are present.
 
 Example repository:
 
 ```text
 src/
 
-Accounts.Api/
-ReferenceData.Api/
-Employer.Api/
-Identity.Api/
+Controllers/AccountsController.cs
+Controllers/ReferenceDataController.cs
+Controllers/EmployerController.cs
+Controllers/IdentityController.cs
 ```
 
 Expected output:

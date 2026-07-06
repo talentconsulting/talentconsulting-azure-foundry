@@ -1,6 +1,6 @@
 # Evaluations
 
-## Evaluation 1: No endpoints found
+## Evaluation 1: No controllers found
 
 ### Input
 
@@ -14,15 +14,20 @@
 
 ### Expected Behaviour
 
-Return a valid OpenAPI 3.1.0 YAML document with an empty `paths` object.
+Return valid schema JSON with an empty `specs` array.
 
 ## Evaluation 2: Single GET endpoint
 
 ### Source Pattern
 
 ```csharp
+[ApiController]
+[Route("api/accounts")]
+public class AccountsController : ControllerBase
+{
 [HttpGet("{id}")]
 public async Task<ActionResult<AccountResponse>> GetAccount(Guid id)
+}
 ```
 
 ### Expected Behaviour
@@ -41,8 +46,13 @@ The YAML should contain:
 ### Source Pattern
 
 ```csharp
+[ApiController]
+[Route("api/accounts")]
+public class AccountsController : ControllerBase
+{
 [HttpPost]
 public async Task<ActionResult<CreateAccountResponse>> CreateAccount(CreateAccountRequest request)
+}
 ```
 
 ### Expected Behaviour
@@ -59,16 +69,21 @@ The YAML should contain:
 ### Source Pattern
 
 ```csharp
+[ApiController]
+[Route("api/secure")]
+public class SecureController : ControllerBase
+{
 [Authorize]
 [HttpGet]
 public IActionResult GetSecureResource()
+}
 ```
 
 ### Expected Behaviour
 
 The YAML should include a security scheme when authentication can be identified.
 
-## Evaluation 5: Minimal API endpoints in extension methods
+## Evaluation 5: Ignore Minimal API endpoints
 
 ### Source Pattern
 
@@ -76,23 +91,27 @@ The YAML should include a security scheme when authentication can be identified.
 app.MapGet("/", () => Results.Redirect("/health"));
 app.MapGet("/health", () => Results.Ok());
 app.MapBidEndpoints();
-
-public static class BidEndpoints
-{
-    public static IEndpointRouteBuilder MapBidEndpoints(this IEndpointRouteBuilder app)
-    {
-        var group = app.MapGroup("/api/bids");
-        group.MapGet("/", GetBids);
-        group.MapGet("/{id}", GetBid);
-        group.MapPost("/", CreateBid);
-        return app;
-    }
-}
 ```
 
 ### Expected Behaviour
 
-The YAML must include `/api/bids`, `/api/bids/{id}`, and their HTTP methods. It must not return only `/` and `/health`.
+Return `{"specs":[]}` when no controller classes are present. Do not generate specs from Minimal API route registrations.
+
+## Evaluation 6: Multiple controllers in one server project
+
+### Source Pattern
+
+```text
+src/TalentSuite.Server/
+  Bids/Controllers/BidsController.cs
+  Users/Controllers/UsersController.cs
+  Messages/Controllers/MessagesController.cs
+  Auth/Controllers/AuthController.cs
+```
+
+### Expected Behaviour
+
+The response should contain separate `specs` items for the bids, users, messages, and auth controllers. It must not stop after `Bids/Controllers`; it must continue scanning sibling domain folders such as `Users/Controllers`. It must not return a single generic `talentsuite-api` spec when multiple controllers are present.
 
 ## Evaluation Checks
 

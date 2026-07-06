@@ -1,6 +1,6 @@
 name: openapi-spec-generator
 display_name: "OpenAPI Spec Generator"
-description: "Scans a repository path and generates an OpenAPI 3.1 specification as YAML."
+description: "Scans C# ASP.NET Core controllers and generates one OpenAPI 3.1 YAML specification per controller."
 version: "1.0.0"
 
 agent:
@@ -17,7 +17,7 @@ structured_inputs:
     default: "TalentConsulting/example-api"
   scanPath:
     type: string
-    description: "File or directory path to scan within the repository, for example src/My.Api"
+    description: "File or directory path to scan for C# ASP.NET Core controllers, for example src/My.Api"
     default: "."
   openApiTitle:
     type: string
