@@ -1,4 +1,4 @@
-name: Run Service Catalo`ue Agent Chain
+name: Run Service Catalogue Agent Chain
 
 on:
   workflow_dispatch:
