@@ -4,14 +4,12 @@
 
 ### Added
 
-- Initial OpenAPI Spec Generator agent definition.
-- Configurable repository input.
-- Configurable scan path input.
-- Structured JSON output containing OpenAPI JSON objects.
-- GitHub MCP tool configuration.
-- Read-only guardrails.
-- Evaluation scenarios for empty, GET, POST, and authenticated APIs.
+- Repository and scan path inputs.
+- Full recursive scan behavior for API endpoints under `scanPath`.
+- OpenAPI 3.1 JSON output.
+- `specs` array wrapper for multiple API/domain/service specs.
+- Read-only GitHub access.
 
 ### Notes
 
-This agent generates an OpenAPI JSON document but does not write the file back to the repository. A downstream workflow step should save the `open-api` value to the file path required by the pipeline.
+This agent generates OpenAPI JSON objects and returns them in the configured response schema. It does not write files, create branches, or open pull requests.

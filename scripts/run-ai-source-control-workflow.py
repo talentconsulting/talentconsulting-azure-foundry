@@ -2,9 +2,6 @@ import argparse
 import json
 import os
 import re
-import urllib.error
-import urllib.parse
-import urllib.request
 import uuid
 from pathlib import Path
 from typing import Any
@@ -143,151 +140,6 @@ def same_repository(left: str, right: str) -> bool:
     return normalize_repository_ref(left).lower() == normalize_repository_ref(right).lower()
 
 
-def github_api_get_json(url: str) -> Any:
-    headers = {
-        "Accept": "application/vnd.github+json",
-        "User-Agent": "ai-source-control-workflow",
-        "X-GitHub-Api-Version": "2022-11-28",
-    }
-    token = os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN")
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
-    request = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(request, timeout=30) as response:
-        return json.loads(response.read().decode("utf-8"))
-
-
-def github_api_get_text(url: str) -> str:
-    headers = {
-        "Accept": "application/vnd.github.raw",
-        "User-Agent": "ai-source-control-workflow",
-        "X-GitHub-Api-Version": "2022-11-28",
-    }
-    token = os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN")
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
-    request = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(request, timeout=30) as response:
-        return response.read().decode("utf-8")
-
-
-def normalize_route_template(route: str) -> str:
-    route = route.strip().strip("/")
-    route = re.sub(r"\[controller\]", "", route, flags=re.IGNORECASE)
-    route = re.sub(r"\[action\]", "", route, flags=re.IGNORECASE)
-    route = re.sub(r"\{([^}:]+)(?::[^}]+)?\}", r"{\1}", route)
-    route = re.sub(r"/+", "/", route).strip("/")
-    return route
-
-
-def combine_routes(class_route: str, method_route: str) -> str:
-    combined = "/".join(
-        part for part in (normalize_route_template(class_route), normalize_route_template(method_route)) if part
-    )
-    return "/" + combined.strip("/")
-
-
-def extract_route_argument(attribute: str) -> str:
-    match = re.search(r'\(\s*(?:"([^"]*)"|@"([^"]*)")', attribute)
-    if not match:
-        return ""
-    return match.group(1) if match.group(1) is not None else match.group(2)
-
-
-def parse_controller_endpoints(source_path: str, source: str) -> list[dict[str, str]]:
-    class_route = ""
-    controller_name = Path(source_path).stem
-    class_match = re.search(
-        r"((?:\s*\[[^\]]+\]\s*)*)\s*public\s+(?:sealed\s+|partial\s+|abstract\s+)*class\s+(\w+)",
-        source,
-        re.MULTILINE,
-    )
-    if class_match:
-        controller_name = class_match.group(2)
-        route_match = re.search(r"\[Route\s*\(([^\]]+)\)\]", class_match.group(1))
-        if route_match:
-            class_route = extract_route_argument(route_match.group(0))
-
-    endpoints: list[dict[str, str]] = []
-    action_pattern = re.compile(
-        r"((?:\s*\[[^\]]+\]\s*)*)\s*public\s+(?:async\s+)?(?:[\w<>,\[\]\?]+\s+)+(\w+)\s*\(",
-        re.MULTILINE,
-    )
-    http_methods = {
-        "HttpGet": "get",
-        "HttpPost": "post",
-        "HttpPut": "put",
-        "HttpPatch": "patch",
-        "HttpDelete": "delete",
-    }
-    for match in action_pattern.finditer(source):
-        attributes = match.group(1)
-        action_name = match.group(2)
-        for attribute_name, method in http_methods.items():
-            for attribute_match in re.finditer(rf"\[{attribute_name}(?:\s*\([^\]]*\))?\]", attributes):
-                route = extract_route_argument(attribute_match.group(0))
-                endpoints.append(
-                    {
-                        "sourcePath": source_path,
-                        "controllerName": controller_name,
-                        "actionName": action_name,
-                        "method": method,
-                        "path": combine_routes(class_route, route),
-                    }
-                )
-
-    return endpoints
-
-
-def discover_controller_paths(repository: str, scan_path: str) -> list[str]:
-    repository_ref = normalize_repository_ref(repository)
-    repository_url_part = urllib.parse.quote(repository_ref, safe="/")
-    repo_metadata = github_api_get_json(f"https://api.github.com/repos/{repository_url_part}")
-    default_branch = repo_metadata.get("default_branch") or "main"
-    tree_url = (
-        f"https://api.github.com/repos/{repository_url_part}/git/trees/"
-        f"{urllib.parse.quote(default_branch, safe='')}?recursive=1"
-    )
-    tree_payload = github_api_get_json(tree_url)
-    tree = tree_payload.get("tree")
-    if not isinstance(tree, list):
-        raise ValueError(f"GitHub tree response for {repository_ref} did not contain a tree array.")
-
-    prefix = f"{scan_path}/" if scan_path else ""
-    controller_paths: list[str] = []
-    for item in tree:
-        if not isinstance(item, dict) or item.get("type") != "blob":
-            continue
-        path = item.get("path")
-        if not isinstance(path, str):
-            continue
-        if prefix and not path.startswith(prefix):
-            continue
-        if not path.endswith(".cs"):
-            continue
-        if "/Controllers/" not in f"/{path}":
-            continue
-        if not Path(path).name.endswith("Controller.cs"):
-            continue
-        controller_paths.append(path)
-
-    return sorted(controller_paths)
-
-
-def discover_controller_endpoints(repository: str, controller_paths: list[str]) -> list[dict[str, str]]:
-    repository_ref = normalize_repository_ref(repository)
-    repository_url_part = urllib.parse.quote(repository_ref, safe="/")
-    endpoints: list[dict[str, str]] = []
-    for controller_path in controller_paths:
-        path_part = urllib.parse.quote(controller_path, safe="/")
-        source_url = f"https://api.github.com/repos/{repository_url_part}/contents/{path_part}"
-        source = github_api_get_text(source_url)
-        endpoints.extend(parse_controller_endpoints(controller_path, source))
-    return endpoints
-
-
 def validate_repository_detector_output(payload: dict[str, Any]) -> None:
     repositories = payload.get("repositories")
     if not isinstance(repositories, list):
@@ -308,17 +160,12 @@ def validate_repository_detector_output(payload: dict[str, Any]) -> None:
             raise ValueError(f"repositories[{index}].repository must be a non-empty string.")
 
 
-def validate_openapi_output(
-    payload: dict[str, Any],
-    expected_controller_paths: list[str] | None = None,
-    expected_controller_endpoints: list[dict[str, str]] | None = None,
-) -> None:
+def validate_openapi_output(payload: dict[str, Any]) -> None:
     specs = payload.get("specs")
     if not isinstance(specs, list):
         raise ValueError("OpenAPI generator response must contain a specs array.")
 
     required = {"domain-api", "open-api", "fileName", "serviceName", "sourcePath", "contentType"}
-    returned_source_paths: set[str] = set()
     for index, spec in enumerate(specs):
         if not isinstance(spec, dict):
             raise ValueError(f"specs[{index}] must be an object.")
@@ -336,58 +183,6 @@ def validate_openapi_output(
             raise ValueError(f"specs[{index}].open-api.paths must be a non-empty object.")
         if not isinstance(spec["sourcePath"], str) or not spec["sourcePath"]:
             raise ValueError(f"specs[{index}].sourcePath must be a non-empty string.")
-        returned_source_paths.add(spec["sourcePath"])
-
-    if expected_controller_paths:
-        expected_paths = set(expected_controller_paths)
-        unknown_paths = sorted(returned_source_paths - expected_paths)
-        if unknown_paths:
-            raise ValueError(
-                "OpenAPI generator returned specs for paths outside the supplied "
-                f"controller inventory: {', '.join(unknown_paths)}"
-            )
-        missing_paths = sorted(expected_paths - returned_source_paths)
-        if missing_paths:
-            raise ValueError(
-                "OpenAPI generator did not return specs for every supplied controller path. "
-                f"Missing: {', '.join(missing_paths)}"
-            )
-
-    if expected_controller_endpoints:
-        endpoints_by_source_path: dict[str, set[tuple[str, str]]] = {}
-        for endpoint in expected_controller_endpoints:
-            source_path = endpoint.get("sourcePath")
-            method = endpoint.get("method")
-            path = endpoint.get("path")
-            if source_path and method and path:
-                endpoints_by_source_path.setdefault(source_path, set()).add(
-                    (method.lower(), normalize_route_template(path))
-                )
-
-        generated_by_source_path: dict[str, set[tuple[str, str]]] = {}
-        for spec in specs:
-            generated_paths = spec["open-api"]["paths"]
-            source_path = spec["sourcePath"]
-            for path, path_item in generated_paths.items():
-                if not isinstance(path_item, dict):
-                    continue
-                for method in ("get", "post", "put", "patch", "delete"):
-                    if method in path_item:
-                        generated_by_source_path.setdefault(source_path, set()).add(
-                            (method, normalize_route_template(str(path)))
-                        )
-
-        missing_endpoints: list[str] = []
-        for source_path, expected_endpoints in endpoints_by_source_path.items():
-            generated_endpoints = generated_by_source_path.get(source_path, set())
-            for method, path in sorted(expected_endpoints - generated_endpoints):
-                missing_endpoints.append(f"{source_path} {method.upper()} /{path}")
-
-        if missing_endpoints:
-            raise ValueError(
-                "OpenAPI generator omitted controller endpoints discovered from C# attributes. "
-                f"Missing: {', '.join(missing_endpoints)}"
-            )
 
 
 def validate_pull_request_output(
@@ -618,87 +413,23 @@ def main() -> None:
         repository_name = repository["repoName"]
         repository_ref = repository["repository"]
         repository_output_dir = safe_file_name(repository_ref.replace("/", "-"), "repository")
-        try:
-            controller_paths = discover_controller_paths(repository_ref, scan_path)
-            controller_endpoints = discover_controller_endpoints(repository_ref, controller_paths)
-        except (urllib.error.URLError, TimeoutError, ValueError) as error:
-            controller_paths = []
-            controller_endpoints = []
-            print(f"Warning: failed to pre-scan controller paths for {repository_ref}: {error}")
-
-        print(f"Discovered {len(controller_paths)} controller path(s) for {repository_ref}.")
-        print(f"Discovered {len(controller_endpoints)} controller endpoint(s) for {repository_ref}.")
-        endpoints_by_controller_path: dict[str, list[dict[str, str]]] = {}
-        for endpoint in controller_endpoints:
-            source_path = endpoint.get("sourcePath")
-            if source_path:
-                endpoints_by_controller_path.setdefault(source_path, []).append(endpoint)
-
-        openapi_output: dict[str, Any] = {"specs": []}
-        generator_outputs: list[dict[str, Any]] = []
-        if controller_paths:
-            for controller_path in controller_paths:
-                controller_input = {
-                    "repository": repository_ref,
-                    "scanPath": scan_path,
-                    "controllerPaths": [controller_path],
-                    "controllerEndpoints": endpoints_by_controller_path.get(controller_path, []),
-                }
-                controller_output = invoke_agent(
-                    project,
-                    openapi_agent_name,
-                    openapi_agent_model,
-                    controller_input,
-                )
-                validate_openapi_output(
-                    controller_output,
-                    expected_controller_paths=[controller_path],
-                    expected_controller_endpoints=endpoints_by_controller_path.get(controller_path, []),
-                )
-                if len(controller_output["specs"]) != 1:
-                    raise ValueError(
-                        "OpenAPI generator must return exactly one spec for each controller "
-                        f"invocation. Controller {controller_path} returned "
-                        f"{len(controller_output['specs'])} specs."
-                    )
-                generator_outputs.append(
-                    {
-                        "controllerPath": controller_path,
-                        "controllerEndpoints": endpoints_by_controller_path.get(controller_path, []),
-                        "output": controller_output,
-                    }
-                )
-                openapi_output["specs"].extend(controller_output["specs"])
-        else:
-            generator_input = {
-                "repository": repository_ref,
-                "scanPath": scan_path,
-                "controllerPaths": [],
-                "controllerEndpoints": [],
-            }
-            openapi_output = invoke_agent(
-                project,
-                openapi_agent_name,
-                openapi_agent_model,
-                generator_input,
-            )
-            validate_openapi_output(openapi_output)
-            generator_outputs.append(
-                {
-                    "controllerPath": "",
-                    "controllerEndpoints": [],
-                    "output": openapi_output,
-                }
-            )
+        generator_input = {
+            "repository": repository_ref,
+            "scanPath": scan_path,
+        }
+        openapi_output = invoke_agent(
+            project,
+            openapi_agent_name,
+            openapi_agent_model,
+            generator_input,
+        )
+        validate_openapi_output(openapi_output)
 
         repo_output = {
             "repoName": repository_name,
             "repoURL": repository["repoURL"],
             "repository": repository_ref,
             "pullRequestRepository": manifest_repository_ref,
-            "controllerPaths": controller_paths,
-            "controllerEndpoints": controller_endpoints,
-            "generatorOutputs": generator_outputs,
             "specs": openapi_output["specs"],
             "pullRequest": None,
             "skipped": False,

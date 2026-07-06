@@ -2,17 +2,17 @@
 
 ## Data Access
 
-- Only scan the repository provided in `repository`.
-- Only scan the path provided in `scanPath`.
-- Treat empty `scanPath`, `.`, and `./` as repository root and do not request a literal `.` path from GitHub.
+- Scan only the repository supplied in `repository`.
+- Scan only the directory supplied in `scanPath`.
+- Use the repository default branch for reads.
 - Do not inspect unrelated repositories.
 - Do not follow external links unless they are repository-local references required to understand API code.
 
-## Write Safety
+## Read Only
 
 This agent is read-only.
 
-The agent must not:
+It must never:
 
 - Create files
 - Update files
@@ -23,40 +23,26 @@ The agent must not:
 - Modify repository settings
 - Trigger deployments
 
-## OpenAPI Safety
-
-- Generate a valid OpenAPI JSON document.
-- Do not include secrets, tokens, credentials, connection strings, or environment variable values.
-- If source code references sensitive values, describe the requirement generically.
-- Do not include internal tool logs in the output.
-- Do not include stack traces in the output.
-
 ## Output Safety
 
-The response must be valid JSON matching the configured schema.
+- Return only valid JSON.
+- Do not return markdown.
+- Do not return explanations.
+- Do not return tool logs.
+- Do not return stack traces.
+- Do not return secrets, credentials, tokens, connection strings, or environment variable values.
 
-Each `specs` item must include `domain-api` and `open-api`.
+## OpenAPI Safety
 
-The `open-api` property must contain the complete OpenAPI JSON document as an object, not as a string.
-
-No additional JSON properties are allowed.
+- Generate OpenAPI JSON objects, not YAML strings.
+- Use OpenAPI `3.1.0`.
+- Use conservative descriptions when exact behavior cannot be inferred.
+- Include all discovered application endpoints.
+- Ignore health, diagnostics, metrics, Swagger UI, and root redirects when application endpoints exist.
+- Do not return only `/` and `/health` after reading a startup/program file if application route files exist elsewhere under `scanPath`.
 
 ## Failure Behaviour
 
-If the repository cannot be read, return:
+If the repository cannot be read, the scan path cannot be found, or no API endpoints are discovered, return:
 
-```json
-{
-  "specs": []
-}
-```
-
-If the scan path cannot be found, return:
-
-```json
-{
-  "specs": []
-}
-```
-
-Do not return refusal text, apology text, markdown, or prose.
+`{"specs":[]}`

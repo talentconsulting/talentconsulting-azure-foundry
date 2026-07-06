@@ -2,8 +2,6 @@ name: Deploy OpenAPI Spec Reviewer
 
 on:
   push:
-    branches:
-      - main
     paths:
       - "agents/openapi-spec-reviewer/**"
       - "scripts/deploy-agent.py"
@@ -14,6 +12,7 @@ on:
 
 jobs:
   deploy:
+    if: github.event_name != 'push' || github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     environment: dev
 

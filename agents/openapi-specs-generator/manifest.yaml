@@ -1,6 +1,6 @@
 name: openapi-spec-generator
 display_name: "OpenAPI Spec Generator"
-description: "Scans C# ASP.NET Core controllers and generates one OpenAPI 3.1 JSON specification per controller."
+description: "Scans a repository path and generates OpenAPI 3.1 JSON specifications for discovered API endpoints."
 version: "1.0.0"
 
 agent:
@@ -17,32 +17,8 @@ structured_inputs:
     default: "TalentConsulting/example-api"
   scanPath:
     type: string
-    description: "File or directory path to scan for C# ASP.NET Core controllers, for example src/My.Api"
+    description: "File or directory path to scan for API endpoints, for example src"
     default: "."
-  controllerPaths:
-    type: array
-    description: "Optional explicit list of C# controller file paths discovered by the workflow runner."
-    items:
-      type: string
-    default: []
-  controllerEndpoints:
-    type: array
-    description: "Optional explicit list of C# controller endpoints discovered from route attributes by the workflow runner."
-    items:
-      type: object
-      properties:
-        sourcePath:
-          type: string
-        controllerName:
-          type: string
-        actionName:
-          type: string
-        method:
-          type: string
-        path:
-          type: string
-      additionalProperties: false
-    default: []
 
 outputs:
   type: json_schema

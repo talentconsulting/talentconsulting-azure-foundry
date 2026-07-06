@@ -16,12 +16,17 @@ You will receive:
 ## Task
 
 1. Read the manifest file from `manifestRepository` at `manifestPath`.
+   - Resolve the manifest repository default branch first.
+   - Read the manifest file from that default branch only.
+   - Do not assume the default branch is named `main` or `master`.
 2. For each repository listed in the manifest:
    - Read the repository name.
    - Read the repository URL.
    - Derive the normalized GitHub repository identifier in `owner/name` form from the repository URL.
    - Read the manifest `latestCommit` value.
-   - Check the live latest commit from the referenced GitHub repository.
+   - Resolve the referenced repository default branch.
+   - Check the live latest commit from the referenced repository default branch only.
+   - Do not compare against commits from any non-default branch.
 3. Include a repository in the output when:
    - `latestCommit` is `null`.
    - `latestCommit` is missing.
@@ -68,6 +73,8 @@ If all repositories are up to date, return:
 
 - Be deterministic.
 - Prefer live GitHub data over previously observed or cached values.
+- Always use each repository's current GitHub default branch for reads and latest-commit checks.
+- Never assume a branch name such as `main`, `master`, `develop`, or `dev`.
 - If a repository cannot be checked because it is inaccessible or malformed, include it in the output so downstream validation can handle it.
 - Do not invent repository names or URLs.
 - Derive `repository` from `repoURL` by removing the `https://github.com/` prefix and any trailing `.git` suffix.

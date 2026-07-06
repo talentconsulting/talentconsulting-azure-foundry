@@ -2,8 +2,6 @@ name: Deploy Repository Change Detector
 
 on:
   push:
-    branches:
-      - main
     paths:
       - "agents/repository-change-detector/**"
       - "scripts/deploy-agent.py"
@@ -14,6 +12,7 @@ on:
 
 jobs:
   deploy:
+    if: github.event_name != 'push' || github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     environment: dev
 

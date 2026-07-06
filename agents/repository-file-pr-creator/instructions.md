@@ -53,6 +53,8 @@ Every derived or supplied change must target the same repository. If more than o
    - Reject absolute paths, parent-directory traversal, empty file names, and file names containing path separators.
    - Preserve `content` exactly.
 5. Read the target repository default branch.
+   - Resolve the current default branch from GitHub metadata.
+   - Do not assume the default branch is named `main`, `master`, `develop`, or `dev`.
 6. Create a new branch from the current default branch head.
    - Use `branchName` when supplied.
    - If `branchName` is absent, generate a branch name in the form `ai-source-control/files-<short-id>`.
@@ -65,6 +67,7 @@ Every derived or supplied change must target the same repository. If more than o
    - Use a commit message in the form `Add generated OpenAPI specs`.
    - If the available GitHub tool creates one commit per file update, still report the final full 40-character commit SHA returned by GitHub.
 9. Open a pull request from the new branch into the repository default branch.
+   - The pull request base branch must be the resolved default branch.
 10. Return only JSON matching the configured output schema.
 
 ## Pull Request Defaults

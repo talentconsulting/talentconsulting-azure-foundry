@@ -35,8 +35,6 @@ agents:
     input_map:
       repository: repository
       scanPath: scan_path
-      controllerPaths: controllerPaths
-      controllerEndpoints: controllerEndpoints
   repository_file_pr_creator:
     name: repository-file-pr-creator
     input_map:
