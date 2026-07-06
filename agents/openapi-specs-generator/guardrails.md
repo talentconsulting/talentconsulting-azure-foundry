@@ -25,7 +25,7 @@ The agent must not:
 
 ## OpenAPI Safety
 
-- Generate a valid OpenAPI YAML document.
+- Generate a valid OpenAPI JSON document.
 - Do not include secrets, tokens, credentials, connection strings, or environment variable values.
 - If source code references sensitive values, describe the requirement generically.
 - Do not include internal tool logs in the output.
@@ -37,7 +37,7 @@ The response must be valid JSON matching the configured schema.
 
 Each `specs` item must include `domain-api` and `open-api`.
 
-The `open-api` property must contain the complete OpenAPI YAML document as a string.
+The `open-api` property must contain the complete OpenAPI JSON document as an object, not as a string.
 
 No additional JSON properties are allowed.
 

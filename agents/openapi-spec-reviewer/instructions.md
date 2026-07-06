@@ -21,7 +21,7 @@ You receive:
 
 ## Task
 
-Review the `open-api` YAML document for:
+Review the `open-api` JSON document for:
 
 - OpenAPI 3.1 structure.
 - Required top-level fields.
@@ -63,7 +63,7 @@ Use `recommendedAction`:
 ```json
 {
   "domain-api": "accounts-api",
-  "fileName": "accounts-api-openapi.yml",
+  "fileName": "accounts-api-openapi.json",
   "valid": true,
   "severity": "none",
   "recommendedAction": "accept",

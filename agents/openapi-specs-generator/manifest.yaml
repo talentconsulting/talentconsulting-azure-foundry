@@ -1,6 +1,6 @@
 name: openapi-spec-generator
 display_name: "OpenAPI Spec Generator"
-description: "Scans C# ASP.NET Core controllers and generates one OpenAPI 3.1 YAML specification per controller."
+description: "Scans C# ASP.NET Core controllers and generates one OpenAPI 3.1 JSON specification per controller."
 version: "1.0.0"
 
 agent:
@@ -24,7 +24,7 @@ outputs:
   type: json_schema
   json_schema:
     name: openapi_specs_output
-    strict: true
+    strict: false
     schema:
       type: object
       properties:
@@ -37,11 +37,12 @@ outputs:
                 type: string
                 description: "Domain API identifier or service API name, formatted in lowercase kebab-case where possible."
               open-api:
-                type: string
-                description: "Complete OpenAPI 3.1 YAML specification for this domain API."
+                type: object
+                description: "Complete OpenAPI 3.1 JSON object for this domain API."
+                additionalProperties: true
               fileName:
                 type: string
-                description: "Suggested output filename for this OpenAPI YAML file."
+                description: "Suggested output filename for this OpenAPI JSON file."
               serviceName:
                 type: string
                 description: "Detected API/service name."
@@ -51,7 +52,7 @@ outputs:
               contentType:
                 type: string
                 enum:
-                  - "application/yaml"
+                  - "application/json"
             required:
               - domain-api
               - open-api

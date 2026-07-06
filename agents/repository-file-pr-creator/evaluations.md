@@ -8,8 +8,8 @@
 {
   "changes": [
     {
-      "filename": "accounts-api-openapi.yml",
-      "content": "openapi: 3.1.0\ninfo:\n  title: Accounts API\n  version: 3.1.0\npaths: {}\n",
+      "filename": "accounts-api-openapi.json",
+      "content": "{\n  \"openapi\": \"3.1.0\",\n  \"info\": {\n    \"title\": \"Accounts API\",\n    \"version\": \"3.1.0\"\n  },\n  \"paths\": {}\n}\n",
       "repository": "https://github.com/TalentConsulting/example-api",
       "path": "openapi"
     }
@@ -22,7 +22,7 @@
 ### Expected Behaviour
 
 - Create branch `ai-source-control/accounts-openapi` from the repository default branch.
-- Write `openapi/accounts-api-openapi.yml` to the branch.
+- Write `openapi/accounts-api-openapi.json` to the branch.
 - Commit the file change to the branch.
 - Create one pull request into the default branch.
 - Return `success: true` with the commit SHA, pull request URL, and file action.
@@ -35,14 +35,14 @@
 {
   "changes": [
     {
-      "filename": "accounts-api-openapi.yml",
-      "content": "openapi: 3.1.0\ninfo:\n  title: Accounts API\n  version: 3.1.0\npaths: {}\n",
+      "filename": "accounts-api-openapi.json",
+      "content": "{\n  \"openapi\": \"3.1.0\",\n  \"info\": {\n    \"title\": \"Accounts API\",\n    \"version\": \"3.1.0\"\n  },\n  \"paths\": {}\n}\n",
       "repository": "TalentConsulting/example-api",
       "path": "openapi"
     },
     {
-      "filename": "employer-api-openapi.yml",
-      "content": "openapi: 3.1.0\ninfo:\n  title: Employer API\n  version: 3.1.0\npaths: {}\n",
+      "filename": "employer-api-openapi.json",
+      "content": "{\n  \"openapi\": \"3.1.0\",\n  \"info\": {\n    \"title\": \"Employer API\",\n    \"version\": \"3.1.0\"\n  },\n  \"paths\": {}\n}\n",
       "repository": "TalentConsulting/example-api",
       "path": "openapi"
     }
@@ -70,11 +70,28 @@
     "specs": [
       {
         "domain-api": "accounts-api",
-        "open-api": "openapi: 3.1.0\ninfo:\n  title: Accounts API\n  version: 3.1.0\npaths: {}\n",
-        "fileName": "accounts-api-openapi.yml",
+        "open-api": {
+          "openapi": "3.1.0",
+          "info": {
+            "title": "Accounts API",
+            "version": "3.1.0"
+          },
+          "paths": {
+            "/accounts": {
+              "get": {
+                "responses": {
+                  "200": {
+                    "description": "OK"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "fileName": "accounts-api-openapi.json",
         "serviceName": "Accounts API",
         "sourcePath": ".",
-        "contentType": "application/yaml"
+        "contentType": "application/json"
       }
     ]
   }
@@ -85,7 +102,7 @@
 
 - Derive one file change from `openApiGeneratorResponse.specs`.
 - Create one branch.
-- Write `openapi-specs/accounts-api-openapi.yml`.
+- Write `openapi-specs/accounts-api-openapi.json`.
 - Commit the file change to the branch.
 - Create one pull request.
 
@@ -97,14 +114,14 @@
 {
   "changes": [
     {
-      "filename": "accounts-api-openapi.yml",
-      "content": "openapi: 3.1.0\n",
+      "filename": "accounts-api-openapi.json",
+      "content": "{\n  \"openapi\": \"3.1.0\"\n}\n",
       "repository": "TalentConsulting/accounts-api",
       "path": "openapi"
     },
     {
-      "filename": "employer-api-openapi.yml",
-      "content": "openapi: 3.1.0\n",
+      "filename": "employer-api-openapi.json",
+      "content": "{\n  \"openapi\": \"3.1.0\"\n}\n",
       "repository": "TalentConsulting/employer-api",
       "path": "openapi"
     }

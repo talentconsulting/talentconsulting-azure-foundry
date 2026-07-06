@@ -171,10 +171,16 @@ def validate_openapi_output(payload: dict[str, Any]) -> None:
             raise ValueError(f"specs[{index}] must be an object.")
         if set(spec) != required:
             raise ValueError(f"specs[{index}] must contain only {sorted(required)}.")
-        if spec["contentType"] != "application/yaml":
-            raise ValueError(f"specs[{index}].contentType must be application/yaml.")
-        if not isinstance(spec["open-api"], str) or not spec["open-api"].strip():
-            raise ValueError(f"specs[{index}].open-api must be a non-empty string.")
+        if spec["contentType"] != "application/json":
+            raise ValueError(f"specs[{index}].contentType must be application/json.")
+        openapi_document = spec["open-api"]
+        if not isinstance(openapi_document, dict):
+            raise ValueError(f"specs[{index}].open-api must be an object.")
+        if openapi_document.get("openapi") != "3.1.0":
+            raise ValueError(f"specs[{index}].open-api.openapi must be 3.1.0.")
+        paths = openapi_document.get("paths")
+        if not isinstance(paths, dict) or not paths:
+            raise ValueError(f"specs[{index}].open-api.paths must be a non-empty object.")
 
 
 def validate_pull_request_output(
@@ -453,11 +459,14 @@ def main() -> None:
         for spec in openapi_output["specs"]:
             file_name = safe_file_name(
                 spec.get("fileName", ""),
-                f"{safe_file_name(repository_name, 'repository')}-openapi.yml",
+                f"{safe_file_name(repository_name, 'repository')}-openapi.json",
             )
             spec_path = specs_dir / repository_output_dir / file_name
             spec_path.parent.mkdir(parents=True, exist_ok=True)
-            spec_path.write_text(spec["open-api"], encoding="utf-8")
+            spec_path.write_text(
+                json.dumps(spec["open-api"], indent=2) + "\n",
+                encoding="utf-8",
+            )
 
         pr_input = {
             "repository": manifest_repository_ref,

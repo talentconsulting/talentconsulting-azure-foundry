@@ -26,7 +26,7 @@ The agent must not:
 
 - Return only valid JSON matching the configured schema.
 - Do not include markdown.
-- Do not include the full OpenAPI YAML in the response.
+- Do not include the full OpenAPI JSON document in the response.
 - Do not include secrets, credentials, connection strings, or environment variable values.
 - Do not include stack traces or raw tool output.
 - Do not include additional JSON properties.

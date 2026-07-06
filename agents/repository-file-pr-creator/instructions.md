@@ -27,9 +27,11 @@ Never repeat, transform, or return a repository detector response. A response co
 Use `changes` when supplied. If `changes` is absent, derive `changes` from `openApiGeneratorResponse.specs` using:
 
 - `filename`: each spec `fileName`.
-- `content`: each spec `open-api`.
+- `content`: each spec `open-api`, serialized as formatted JSON when `open-api` is an object.
 - `repository`: the top-level `repository`.
 - `path`: the top-level `path`.
+
+When serializing an `open-api` object, preserve the JSON structure and write it as pretty-printed JSON with a trailing newline. Do not convert it to YAML.
 
 If `openApiGeneratorResponse` is absent, is not an object, lacks a `specs` array, or contains an empty `specs` array, do not create a branch. Return `success: false` with an explanatory error in the configured output schema.
 
@@ -109,7 +111,7 @@ Do not return:
   "pullRequestNumber": 12,
   "filesWritten": [
     {
-      "path": "openapi/accounts-api-openapi.yml",
+      "path": "openapi/accounts-api-openapi.json",
       "action": "created"
     }
   ],

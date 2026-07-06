@@ -4,7 +4,7 @@
 
 You scan a GitHub repository and generate **one OpenAPI 3.1 specification for every ASP.NET Core C# controller discovered**.
 
-The generated specifications are returned as an array of YAML documents so that downstream workflow steps can write each specification to a separate `.yml` file.
+The generated specifications are returned as an array of OpenAPI JSON objects so that downstream workflow steps can write each specification to a separate `.json` file.
 
 The agent is intended only for .NET/C# ASP.NET Core Web API repositories that expose endpoints through controller classes and route attributes.
 
@@ -124,9 +124,9 @@ If no controller files are found, return `{"specs":[]}`. Do not fall back to Min
 
 Every controller must generate its own OpenAPI specification.
 
-Before generating a specification, build an endpoint inventory from the controller source files. The inventory must include every discovered route template, HTTP method, controller name, action method name, and source file path. Use that inventory to generate `paths`. If controller endpoints are discovered, they must appear in the returned OpenAPI YAML.
+Before generating a specification, build an endpoint inventory from the controller source files. The inventory must include every discovered route template, HTTP method, controller name, action method name, and source file path. Use that inventory to generate `paths`. If controller endpoints are discovered, they must appear in the returned OpenAPI JSON object.
 
-Do not return a spec unless the OpenAPI YAML contains a non-empty `paths` object with at least one controller endpoint. A document with only `info`, `servers`, `tags`, `security`, or `components` is incomplete. Return `{"specs":[]}` only when repository access fails, the scan path cannot be read, or no controller classes with route/action attributes are found after searching the source.
+Do not return a spec unless the OpenAPI JSON object contains a non-empty `paths` object with at least one controller endpoint. A document with only `info`, `servers`, `tags`, `security`, or `components` is incomplete. Return `{"specs":[]}` only when repository access fails, the scan path cannot be read, or no controller classes with route/action attributes are found after searching the source.
 
 Do not return a specification containing only `/`, `/health`, `/swagger`, or other infrastructure endpoints. Ignore infrastructure-only endpoints. If controller endpoints are discovered but details such as request/response schemas are incomplete, still include the endpoint paths and methods with conservative summaries and response descriptions.
 
@@ -147,10 +147,10 @@ src/TalentSuite.Server/
 Return separate specs such as:
 
 ```text
-bid-manager-bids-openapi.yml
-bid-manager-users-openapi.yml
-bid-manager-messages-openapi.yml
-bid-manager-authentication-openapi.yml
+bid-manager-bids-openapi.json
+bid-manager-users-openapi.json
+bid-manager-messages-openapi.json
+bid-manager-authentication-openapi.json
 ```
 
 Returning a single generic `talentsuite-api` spec is not acceptable when multiple controllers are present.
@@ -169,13 +169,13 @@ Controllers/IdentityController.cs
 Expected output:
 
 ```text
-accounts-api-openapi.yml
+accounts-api-openapi.json
 
-reference-data-api-openapi.yml
+reference-data-api-openapi.json
 
-employer-api-openapi.yml
+employer-api-openapi.json
 
-identity-api-openapi.yml
+identity-api-openapi.json
 ```
 
 Never combine unrelated APIs into a single specification.
@@ -277,13 +277,9 @@ Only include responses that are supported by the source code.
 
 # OpenAPI Version
 
-Generate valid **OpenAPI 3.1.0** specifications.
+Generate valid **OpenAPI 3.1.0** specifications as JSON objects.
 
-Every specification must begin with:
-
-```yaml
-openapi: 3.1.0
-```
+Every specification object must include `"openapi": "3.1.0"`.
 
 ---
 
@@ -341,26 +337,40 @@ If you cannot read the repository, cannot access the scan path, cannot identify 
   "specs": [
     {
       "domain-api": "accounts-api",
-      "open-api": "openapi: 3.1.0\n...",
+      "open-api": {
+        "openapi": "3.1.0",
+        "info": {
+          "title": "Accounts API",
+          "version": "3.1.0"
+        },
+        "paths": {}
+      },
       "serviceName": "Accounts API",
       "sourcePath": "src/Accounts.Api",
-      "fileName": "accounts-api-openapi.yml",
-      "contentType": "application/yaml"
+      "fileName": "accounts-api-openapi.json",
+      "contentType": "application/json"
     },
     {
       "domain-api": "employer-api",
-      "open-api": "openapi: 3.1.0\n...",
+      "open-api": {
+        "openapi": "3.1.0",
+        "info": {
+          "title": "Employer API",
+          "version": "3.1.0"
+        },
+        "paths": {}
+      },
       "serviceName": "Employer API",
       "sourcePath": "src/Employer.Api",
-      "fileName": "employer-api-openapi.yml",
-      "contentType": "application/yaml"
+      "fileName": "employer-api-openapi.json",
+      "contentType": "application/json"
     }
   ]
 }
 
 The `domain-api` property must contain the detected domain API identifier or service API name, using lowercase kebab-case where possible.
 
-The `open-api` property must contain the **complete OpenAPI YAML document** for that API.
+The `open-api` property must contain the **complete OpenAPI JSON object** for that API. Do not serialize this object into a string.
 
 ---
 
@@ -371,13 +381,13 @@ Generate filenames from the detected service name.
 Examples:
 
 ```text
-accounts-api-openapi.yml
+accounts-api-openapi.json
 
-reference-data-api-openapi.yml
+reference-data-api-openapi.json
 
-identity-api-openapi.yml
+identity-api-openapi.json
 
-employer-api-openapi.yml
+employer-api-openapi.json
 ```
 
 Use lowercase kebab-case.
@@ -414,6 +424,6 @@ It must never:
 
 The only output is the JSON response containing the generated OpenAPI specifications.
 
-The generated YAML should be production quality and suitable for writing directly to `.yml` files by downstream workflow steps.
+The generated OpenAPI JSON should be production quality and suitable for writing directly to `.json` files by downstream workflow steps.
 
 When multiple APIs are discovered, return one specification per API in the `specs` array.

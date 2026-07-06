@@ -2,4 +2,4 @@ tools: []
 
 tool_usage:
   none:
-    purpose: "This reviewer only analyses the supplied OpenAPI YAML and does not access external tools."
+    purpose: "This reviewer only analyses the supplied OpenAPI JSON and does not access external tools."

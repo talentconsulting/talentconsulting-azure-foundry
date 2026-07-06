@@ -33,8 +33,8 @@ structured_inputs:
     type: string
     description: "Content type for the generated specification."
   open-api:
-    type: string
-    description: "Complete generated OpenAPI YAML document."
+    type: object
+    description: "Complete generated OpenAPI JSON document."
 
 outputs:
   type: json_schema

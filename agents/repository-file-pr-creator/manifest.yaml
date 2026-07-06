@@ -20,7 +20,7 @@ structured_inputs:
       properties:
         filename:
           type: string
-          description: "File name to write, for example accounts-api-openapi.yml."
+          description: "File name to write, for example accounts-api-openapi.json."
         content:
           type: string
           description: "Complete file content to write."

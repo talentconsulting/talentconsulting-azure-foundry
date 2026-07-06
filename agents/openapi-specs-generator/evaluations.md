@@ -31,7 +31,7 @@ public async Task<ActionResult<AccountResponse>> GetAccount(Guid id)
 
 ### Expected Behaviour
 
-The YAML should contain:
+The OpenAPI JSON object should contain:
 
 - `openapi: 3.1.0`
 - A path containing `{id}`
@@ -56,7 +56,7 @@ public async Task<ActionResult<CreateAccountResponse>> CreateAccount(CreateAccou
 
 ### Expected Behaviour
 
-The YAML should contain:
+The OpenAPI JSON object should contain:
 
 - A `post` operation
 - A `requestBody`
@@ -80,7 +80,7 @@ public IActionResult GetSecureResource()
 
 ### Expected Behaviour
 
-The YAML should include a security scheme when authentication can be identified.
+The OpenAPI JSON object should include a security scheme when authentication can be identified.
 
 ## Evaluation 5: Ignore Minimal API endpoints
 
@@ -122,7 +122,8 @@ The response must:
 - Include `domain-api`.
 - Include `open-api`.
 - Include `fileName`.
-- Include `contentType` as `application/yaml`.
-- Contain valid OpenAPI YAML.
+- Include `contentType` as `application/json`.
+- Return `open-api` as a JSON object, not a string.
+- Contain valid OpenAPI JSON.
 - Contain no markdown outside the JSON response.
 - Contain no additional JSON properties.
