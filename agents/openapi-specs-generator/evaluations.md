@@ -118,6 +118,7 @@ The response should contain separate `specs` items for the bids, users, messages
 The response must:
 
 - Be valid JSON.
+- Start with `{` and end with `}` without markdown code fences or explanatory text.
 - Match the configured schema.
 - Include `domain-api`.
 - Include `open-api`.

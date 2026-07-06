@@ -77,6 +77,11 @@ def extract_response_text(response: Any) -> str:
 
 
 def parse_json_response(text: str) -> dict[str, Any]:
+    text = text.strip()
+    fence_match = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL | re.IGNORECASE)
+    if fence_match:
+        text = fence_match.group(1).strip()
+
     try:
         return json.loads(text)
     except json.JSONDecodeError:
