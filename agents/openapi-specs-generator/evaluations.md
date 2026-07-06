@@ -7,8 +7,7 @@
 ```json
 {
   "repository": "TalentConsulting/example-api",
-  "scanPath": "docs",
-  "openApiTitle": "Example API"
+  "scanPath": "docs"
 }
 ```
 

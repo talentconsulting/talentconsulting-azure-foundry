@@ -35,7 +35,6 @@ agents:
     input_map:
       repository: repository
       scanPath: scan_path
-      openApiTitle: repoName
   repository_file_pr_creator:
     name: repository-file-pr-creator
     input_map:

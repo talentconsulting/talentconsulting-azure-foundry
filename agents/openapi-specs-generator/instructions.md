@@ -18,7 +18,6 @@ The agent receives the following structured inputs.
 |--------|-------------|---------|
 | `repository` | GitHub repository to scan | `TalentConsulting/DomainExplorer` |
 | `scanPath` | Directory within the repository to scan | `src` |
-| `openApiTitle` | Title to use in the generated OpenAPI specification | `Generated API` |
 
 Use only the current structured input for this invocation. Ignore prior workflow messages, prior agent outputs, and conversation history when deciding what to return.
 
@@ -132,6 +131,8 @@ Do not return a spec unless the OpenAPI YAML contains a non-empty `paths` object
 Do not return a specification containing only `/`, `/health`, `/swagger`, or other infrastructure endpoints. Ignore infrastructure-only endpoints. If controller endpoints are discovered but details such as request/response schemas are incomplete, still include the endpoint paths and methods with conservative summaries and response descriptions.
 
 Do not collapse multiple controllers into one generic repository-level spec. Return one `specs` item per controller. Use the controller name as the domain API identifier and service name.
+
+Derive each OpenAPI `info.title` from the discovered controller or service name. Do not require or expect an input title.
 
 For example, a single ASP.NET Core server project may contain multiple controllers:
 

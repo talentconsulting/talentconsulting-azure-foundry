@@ -7,7 +7,6 @@
 - Initial OpenAPI Spec Generator agent definition.
 - Configurable repository input.
 - Configurable scan path input.
-- Configurable OpenAPI title and version inputs.
 - Structured JSON output containing YAML content.
 - GitHub MCP tool configuration.
 - Read-only guardrails.

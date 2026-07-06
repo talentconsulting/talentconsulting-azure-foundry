@@ -19,10 +19,6 @@ structured_inputs:
     type: string
     description: "File or directory path to scan for C# ASP.NET Core controllers, for example src/My.Api"
     default: "."
-  openApiTitle:
-    type: string
-    description: "Title to use in the generated OpenAPI specification"
-    default: "Generated API"
 
 outputs:
   type: json_schema

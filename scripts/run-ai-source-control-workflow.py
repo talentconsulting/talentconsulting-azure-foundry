@@ -408,7 +408,6 @@ def main() -> None:
         generator_input = {
             "repository": repository_ref,
             "scanPath": scan_path,
-            "openApiTitle": repository_name,
         }
 
         openapi_output = invoke_agent(
