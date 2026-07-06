@@ -199,6 +199,19 @@ def validate_pull_request_output(payload: dict[str, Any]) -> None:
         isinstance(error, str) for error in payload["errors"]
     ):
         raise ValueError("Pull request response errors must be an array of strings.")
+    if payload["success"]:
+        if not payload["repository"]:
+            raise ValueError("Successful pull request response repository must be non-empty.")
+        if not payload["branchName"]:
+            raise ValueError("Successful pull request response branchName must be non-empty.")
+        if not payload["commitSha"]:
+            raise ValueError("Successful pull request response commitSha must be non-empty.")
+        if not payload["pullRequestUrl"]:
+            raise ValueError("Successful pull request response pullRequestUrl must be non-empty.")
+        if payload["pullRequestNumber"] <= 0:
+            raise ValueError("Successful pull request response pullRequestNumber must be greater than zero.")
+        if not payload["filesWritten"]:
+            raise ValueError("Successful pull request response filesWritten must be non-empty.")
 
     file_required = {"path", "action"}
     for index, file_written in enumerate(payload["filesWritten"]):
@@ -434,6 +447,12 @@ def main() -> None:
             raise ValueError(
                 f"Pull request creation failed for {repository_ref}: {errors}"
             )
+        print(
+            "Created pull request "
+            f"{pr_output['pullRequestUrl']} "
+            f"for {repository_ref} in {manifest_repository_ref} "
+            f"from branch {pr_output['branchName']}."
+        )
 
         repo_output["pullRequest"] = pr_output
         workflow_output["pullRequests"].append(
