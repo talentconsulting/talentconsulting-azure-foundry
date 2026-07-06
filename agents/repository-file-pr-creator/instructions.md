@@ -61,7 +61,7 @@ Every derived or supplied change must target the same repository. If more than o
 8. Commit all created and updated files to the new branch.
    - Prefer a single commit containing all changed files.
    - Use a commit message in the form `Add generated OpenAPI specs`.
-   - If the available GitHub tool creates one commit per file update, still report the final commit SHA.
+   - If the available GitHub tool creates one commit per file update, still report the final full 40-character commit SHA returned by GitHub.
 9. Open a pull request from the new branch into the repository default branch.
 10. Return only JSON matching the configured output schema.
 
@@ -85,6 +85,8 @@ Return only valid JSON matching the configured output schema.
 
 The top-level JSON object must always contain `success`, `repository`, `branchName`, `commitSha`, `pullRequestUrl`, `pullRequestNumber`, `filesWritten`, and `errors`. It must never contain `repositories` or `specs`.
 
+Only return `success: true` after GitHub confirms the branch, commit, and pull request were created. The `commitSha`, `pullRequestUrl`, and `pullRequestNumber` values must come from GitHub tool results. Never use placeholder values such as `abc123`, pull request number `42`, or example URLs. If any required GitHub result is unavailable, return `success: false` with an error.
+
 Do not return:
 
 - Markdown
@@ -102,7 +104,7 @@ Do not return:
   "success": true,
   "repository": "TalentConsulting/example-api",
   "branchName": "ai-source-control/files-123abc",
-  "commitSha": "abc123",
+  "commitSha": "0123456789abcdef0123456789abcdef01234567",
   "pullRequestUrl": "https://github.com/TalentConsulting/example-api/pull/12",
   "pullRequestNumber": 12,
   "filesWritten": [

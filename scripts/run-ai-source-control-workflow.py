@@ -131,6 +131,10 @@ def build_branch_name(repository: str) -> str:
     return f"ai-source-control/openapi-{repository_part}-{suffix}"
 
 
+def same_repository(left: str, right: str) -> bool:
+    return normalize_repository_ref(left).lower() == normalize_repository_ref(right).lower()
+
+
 def validate_repository_detector_output(payload: dict[str, Any]) -> None:
     repositories = payload.get("repositories")
     if not isinstance(repositories, list):
@@ -168,7 +172,10 @@ def validate_openapi_output(payload: dict[str, Any]) -> None:
             raise ValueError(f"specs[{index}].open-api must be a non-empty string.")
 
 
-def validate_pull_request_output(payload: dict[str, Any]) -> None:
+def validate_pull_request_output(
+    payload: dict[str, Any],
+    expected_repository: str | None = None,
+) -> None:
     required = {
         "success",
         "repository",
@@ -206,12 +213,35 @@ def validate_pull_request_output(payload: dict[str, Any]) -> None:
             raise ValueError("Successful pull request response branchName must be non-empty.")
         if not payload["commitSha"]:
             raise ValueError("Successful pull request response commitSha must be non-empty.")
+        if not re.fullmatch(r"[0-9a-fA-F]{40}", payload["commitSha"]):
+            raise ValueError("Successful pull request response commitSha must be a full 40-character Git SHA.")
         if not payload["pullRequestUrl"]:
             raise ValueError("Successful pull request response pullRequestUrl must be non-empty.")
         if payload["pullRequestNumber"] <= 0:
             raise ValueError("Successful pull request response pullRequestNumber must be greater than zero.")
         if not payload["filesWritten"]:
             raise ValueError("Successful pull request response filesWritten must be non-empty.")
+        if expected_repository and not same_repository(payload["repository"], expected_repository):
+            raise ValueError(
+                "Successful pull request response repository must match the manifest repository."
+            )
+        if expected_repository:
+            expected_repo = normalize_repository_ref(expected_repository)
+            pr_url_pattern = (
+                r"https://github\.com/"
+                + re.escape(expected_repo)
+                + r"/pull/([1-9][0-9]*)"
+            )
+            match = re.fullmatch(pr_url_pattern, payload["pullRequestUrl"], re.IGNORECASE)
+            if not match:
+                raise ValueError(
+                    "Successful pull request response pullRequestUrl must be a GitHub pull request URL "
+                    "for the manifest repository."
+                )
+            if int(match.group(1)) != payload["pullRequestNumber"]:
+                raise ValueError(
+                    "Successful pull request response pullRequestNumber must match pullRequestUrl."
+                )
 
     file_required = {"path", "action"}
     for index, file_written in enumerate(payload["filesWritten"]):
@@ -441,7 +471,7 @@ def main() -> None:
             pr_creator_agent_model,
             pr_input,
         )
-        validate_pull_request_output(pr_output)
+        validate_pull_request_output(pr_output, expected_repository=manifest_repository_ref)
         if not pr_output["success"]:
             errors = "; ".join(pr_output["errors"]) or "Pull request creator reported failure."
             raise ValueError(
