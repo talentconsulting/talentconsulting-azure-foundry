@@ -628,24 +628,68 @@ def main() -> None:
 
         print(f"Discovered {len(controller_paths)} controller path(s) for {repository_ref}.")
         print(f"Discovered {len(controller_endpoints)} controller endpoint(s) for {repository_ref}.")
-        generator_input = {
-            "repository": repository_ref,
-            "scanPath": scan_path,
-            "controllerPaths": controller_paths,
-            "controllerEndpoints": controller_endpoints,
-        }
+        endpoints_by_controller_path: dict[str, list[dict[str, str]]] = {}
+        for endpoint in controller_endpoints:
+            source_path = endpoint.get("sourcePath")
+            if source_path:
+                endpoints_by_controller_path.setdefault(source_path, []).append(endpoint)
 
-        openapi_output = invoke_agent(
-            project,
-            openapi_agent_name,
-            openapi_agent_model,
-            generator_input,
-        )
-        validate_openapi_output(
-            openapi_output,
-            expected_controller_paths=controller_paths,
-            expected_controller_endpoints=controller_endpoints,
-        )
+        openapi_output: dict[str, Any] = {"specs": []}
+        generator_outputs: list[dict[str, Any]] = []
+        if controller_paths:
+            for controller_path in controller_paths:
+                controller_input = {
+                    "repository": repository_ref,
+                    "scanPath": scan_path,
+                    "controllerPaths": [controller_path],
+                    "controllerEndpoints": endpoints_by_controller_path.get(controller_path, []),
+                }
+                controller_output = invoke_agent(
+                    project,
+                    openapi_agent_name,
+                    openapi_agent_model,
+                    controller_input,
+                )
+                validate_openapi_output(
+                    controller_output,
+                    expected_controller_paths=[controller_path],
+                    expected_controller_endpoints=endpoints_by_controller_path.get(controller_path, []),
+                )
+                if len(controller_output["specs"]) != 1:
+                    raise ValueError(
+                        "OpenAPI generator must return exactly one spec for each controller "
+                        f"invocation. Controller {controller_path} returned "
+                        f"{len(controller_output['specs'])} specs."
+                    )
+                generator_outputs.append(
+                    {
+                        "controllerPath": controller_path,
+                        "controllerEndpoints": endpoints_by_controller_path.get(controller_path, []),
+                        "output": controller_output,
+                    }
+                )
+                openapi_output["specs"].extend(controller_output["specs"])
+        else:
+            generator_input = {
+                "repository": repository_ref,
+                "scanPath": scan_path,
+                "controllerPaths": [],
+                "controllerEndpoints": [],
+            }
+            openapi_output = invoke_agent(
+                project,
+                openapi_agent_name,
+                openapi_agent_model,
+                generator_input,
+            )
+            validate_openapi_output(openapi_output)
+            generator_outputs.append(
+                {
+                    "controllerPath": "",
+                    "controllerEndpoints": [],
+                    "output": openapi_output,
+                }
+            )
 
         repo_output = {
             "repoName": repository_name,
@@ -654,6 +698,7 @@ def main() -> None:
             "pullRequestRepository": manifest_repository_ref,
             "controllerPaths": controller_paths,
             "controllerEndpoints": controller_endpoints,
+            "generatorOutputs": generator_outputs,
             "specs": openapi_output["specs"],
             "pullRequest": None,
             "skipped": False,
