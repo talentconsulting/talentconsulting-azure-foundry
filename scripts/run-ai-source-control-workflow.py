@@ -2,6 +2,9 @@ import argparse
 import json
 import os
 import re
+import urllib.error
+import urllib.parse
+import urllib.request
 import uuid
 from pathlib import Path
 from typing import Any
@@ -123,6 +126,97 @@ def normalize_repository_ref(value: str) -> str:
     return repository
 
 
+def github_api_get(path: str) -> dict[str, Any]:
+    token = os.getenv("SOURCE_GITHUB_TOKEN") or os.getenv("GH_TOKEN") or os.getenv("GITHUB_TOKEN")
+    request = urllib.request.Request(
+        f"https://api.github.com{path}",
+        headers={
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            **({"Authorization": f"Bearer {token}"} if token else {}),
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        body = error.read().decode("utf-8", errors="replace")
+        raise RuntimeError(
+            f"GitHub API request failed for {path}: HTTP {error.code} {body}"
+        ) from error
+
+
+def is_ignored_source_path(path: str) -> bool:
+    parts = {part.lower() for part in path.split("/")}
+    ignored_parts = {
+        ".git",
+        ".github",
+        "bin",
+        "obj",
+        "packages",
+        "node_modules",
+        "dist",
+        "build",
+        ".vs",
+        ".vscode",
+    }
+    if parts & ignored_parts:
+        return True
+    lowered = path.lower()
+    return (
+        ".test" in lowered
+        or ".tests" in lowered
+        or "/test/" in lowered
+        or "/tests/" in lowered
+        or lowered.endswith("test.cs")
+        or lowered.endswith("tests.cs")
+    )
+
+
+def is_controller_candidate(path: str) -> bool:
+    lowered = path.lower()
+    if not lowered.endswith(".cs") or is_ignored_source_path(path):
+        return False
+    return lowered.endswith("controller.cs") or "/controllers/" in lowered
+
+
+def path_is_under_scan_path(path: str, scan_path: str) -> bool:
+    normalized_path = path.strip("/")
+    normalized_scan_path = scan_path.strip("/")
+    if not normalized_scan_path:
+        return True
+    return normalized_path == normalized_scan_path or normalized_path.startswith(
+        f"{normalized_scan_path}/"
+    )
+
+
+def discover_controller_files(repository: str, scan_path: str) -> list[str]:
+    repo = normalize_repository_ref(repository)
+    repository_metadata = github_api_get(f"/repos/{repo}")
+    default_branch = repository_metadata.get("default_branch")
+    if not isinstance(default_branch, str) or not default_branch:
+        raise ValueError(f"Unable to resolve default branch for {repo}.")
+
+    tree = github_api_get(
+        f"/repos/{repo}/git/trees/{urllib.parse.quote(default_branch, safe='')}?recursive=1"
+    )
+    tree_items = tree.get("tree")
+    if not isinstance(tree_items, list):
+        raise ValueError(f"Unable to read repository tree for {repo}.")
+
+    controller_files = []
+    for item in tree_items:
+        if not isinstance(item, dict) or item.get("type") != "blob":
+            continue
+        path = item.get("path")
+        if not isinstance(path, str):
+            continue
+        if path_is_under_scan_path(path, scan_path) and is_controller_candidate(path):
+            controller_files.append(path)
+
+    return sorted(set(controller_files))
+
+
 def build_branch_name(repository: str) -> str:
     repository_part = safe_file_name(repository.replace("/", "-"), "repository")
     run_id = os.getenv("GITHUB_RUN_ID")
@@ -161,11 +255,15 @@ def validate_repository_detector_output(payload: dict[str, Any]) -> None:
 
 
 def validate_openapi_output(payload: dict[str, Any]) -> None:
+    if set(payload) != {"specs"}:
+        raise ValueError("OpenAPI generator response must contain only specs.")
+
     specs = payload.get("specs")
     if not isinstance(specs, list):
         raise ValueError("OpenAPI generator response must contain a specs array.")
 
     required = {"domain-api", "open-api", "fileName", "serviceName", "sourcePath", "contentType"}
+    source_paths: list[str] = []
     for index, spec in enumerate(specs):
         if not isinstance(spec, dict):
             raise ValueError(f"specs[{index}] must be an object.")
@@ -183,6 +281,21 @@ def validate_openapi_output(payload: dict[str, Any]) -> None:
             raise ValueError(f"specs[{index}].open-api.paths must be a non-empty object.")
         if not isinstance(spec["sourcePath"], str) or not spec["sourcePath"]:
             raise ValueError(f"specs[{index}].sourcePath must be a non-empty string.")
+        source_path = spec["sourcePath"].replace("\\", "/").strip("/")
+        if not source_path.lower().endswith((".cs", ".json", ".yaml", ".yml")):
+            raise ValueError(
+                f"specs[{index}].sourcePath must be a source file path, not a folder."
+            )
+        source_paths.append(source_path)
+
+    duplicate_source_paths = sorted(
+        path for path in set(source_paths) if source_paths.count(path) > 1
+    )
+    if duplicate_source_paths:
+        raise ValueError(
+            "OpenAPI generator specs must not contain duplicate sourcePath values: "
+            + ", ".join(duplicate_source_paths)
+        )
 
 
 def validate_pull_request_output(
@@ -413,17 +526,58 @@ def main() -> None:
         repository_name = repository["repoName"]
         repository_ref = repository["repository"]
         repository_output_dir = safe_file_name(repository_ref.replace("/", "-"), "repository")
-        generator_input = {
-            "repository": repository_ref,
-            "scanPath": scan_path,
-        }
-        openapi_output = invoke_agent(
-            project,
-            openapi_agent_name,
-            openapi_agent_model,
-            generator_input,
-        )
-        validate_openapi_output(openapi_output)
+        controller_files = discover_controller_files(repository_ref, scan_path)
+        if controller_files:
+            print(
+                f"Discovered {len(controller_files)} controller file(s) "
+                f"for {repository_ref}; invoking generator once per file."
+            )
+            write_json(
+                specs_dir / repository_output_dir / "controller-files.json",
+                {"controllerFiles": controller_files},
+            )
+            openapi_output = {"specs": []}
+            for controller_file in controller_files:
+                generator_input = {
+                    "repository": repository_ref,
+                    "scanPath": controller_file,
+                }
+                file_openapi_output = invoke_agent(
+                    project,
+                    openapi_agent_name,
+                    openapi_agent_model,
+                    generator_input,
+                )
+                validate_openapi_output(file_openapi_output)
+                if len(file_openapi_output["specs"]) > 1:
+                    raise ValueError(
+                        "OpenAPI generator returned multiple specs for one source file "
+                        f"{controller_file}."
+                    )
+                for generated_spec in file_openapi_output["specs"]:
+                    generated_source_path = generated_spec["sourcePath"].replace("\\", "/").strip("/")
+                    if generated_source_path != controller_file:
+                        raise ValueError(
+                            "OpenAPI generator sourcePath must match the source file being scanned. "
+                            f"Expected {controller_file}, got {generated_source_path}."
+                        )
+                    openapi_output["specs"].append(generated_spec)
+        else:
+            print(
+                f"No controller files discovered for {repository_ref}; "
+                "invoking generator once for the configured scan path."
+            )
+            generator_input = {
+                "repository": repository_ref,
+                "scanPath": scan_path,
+            }
+            openapi_output = invoke_agent(
+                project,
+                openapi_agent_name,
+                openapi_agent_model,
+                generator_input,
+            )
+            validate_openapi_output(openapi_output)
 
         repo_output = {
             "repoName": repository_name,

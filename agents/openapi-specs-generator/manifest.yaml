@@ -1,6 +1,6 @@
 name: openapi-spec-generator
 display_name: "OpenAPI Spec Generator"
-description: "Scans a repository path and generates OpenAPI 3.1 JSON specifications for discovered API endpoints."
+description: "Scans a repository path and generates one OpenAPI 3.1 JSON specification per discovered API endpoint source file."
 version: "1.0.0"
 
 agent:
@@ -38,7 +38,7 @@ outputs:
                 description: "Domain API identifier or service API name, formatted in lowercase kebab-case where possible."
               open-api:
                 type: object
-                description: "Complete OpenAPI 3.1 JSON object for this domain API."
+                description: "Complete OpenAPI 3.1 JSON object for this API source file."
                 additionalProperties: true
               fileName:
                 type: string
@@ -48,7 +48,7 @@ outputs:
                 description: "Detected API/service name."
               sourcePath:
                 type: string
-                description: "Repository path used to generate this spec."
+                description: "Repository-relative source file path used to generate this spec."
               contentType:
                 type: string
                 enum:

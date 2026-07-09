@@ -168,11 +168,17 @@ Required repository secrets:
 | `AZURE_SUBSCRIPTION_ID` | Azure subscription ID. |
 | `AZURE_AI_PROJECT_ENDPOINT` | Azure AI Foundry project endpoint. |
 
+Optional repository secrets:
+
+| Secret | Description |
+| --- | --- |
+| `SOURCE_GITHUB_TOKEN` | GitHub token with read access to source repositories scanned by the workflow. Use this when the manifest references private repositories outside the workflow repository. |
+
 See [DEPLOYMENT.md](DEPLOYMENT.md) for the full deployment guide.
 
 ## Chained Workflow
 
-Use `.github/workflows/run-service-catalogue-agent-chain.yml` to run the service catalogue chain from GitHub Actions. This calls the deployed Foundry agents one at a time from `scripts/run-ai-source-control-workflow.py`, passing only the validated JSON output needed by the next step. The runner scans changed repositories for APIs, then creates pull requests in the manifest repository supplied to the detector.
+Use `.github/workflows/run-service-catalogue-agent-chain.yml` to run the service catalogue chain from GitHub Actions. This calls the deployed Foundry agents one at a time from `scripts/run-ai-source-control-workflow.py`, passing only the validated JSON output needed by the next step. The runner scans changed repositories for API source files, invokes the OpenAPI generator once per discovered controller file, then creates pull requests in the manifest repository supplied to the detector.
 
 The workflow chain is defined in `workflows/service-catalogue/manifest.yaml`, following the same source-controlled manifest pattern as the agents.
 
