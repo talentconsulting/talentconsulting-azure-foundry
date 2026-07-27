@@ -1,0 +1,21 @@
+tools:
+  - type: mcp
+    server_label: GitHub
+    server_url: https://api.githubcopilot.com/mcp
+    require_approval: never
+    project_connection_id: GitHub
+
+tool_usage:
+  github:
+    purpose: "Recursively enumerate and read source files beneath the exact GitHub tree URL supplied by the user."
+    allowed_operations:
+      - "Read repository directory contents"
+      - "Read repository file contents"
+      - "Read all result pages"
+    disallowed_operations:
+      - "Read outside the supplied repository, ref, or base directory"
+      - "Create, update, or delete files"
+      - "Create or delete branches"
+      - "Create or merge pull requests"
+      - "Modify repository settings"
+      - "Trigger deployments"

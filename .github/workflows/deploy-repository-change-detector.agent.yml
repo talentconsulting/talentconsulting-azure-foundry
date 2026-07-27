@@ -3,7 +3,7 @@ name: Deploy Repository Change Detector
 on:
   push:
     paths:
-      - "agents/repository-change-detector/**"
+      - "agents/prompt/repository-change-detector/**"
       - "scripts/deploy-agent.py"
       - "requirements-agent-deploy.txt"
       - ".github/workflows/deploy-repository-change-detector.agent.yml"
@@ -71,4 +71,4 @@ jobs:
 
       - name: Deploy Repository Change Detector
         run: |
-          python scripts/deploy-agent.py --agent-dir agents/repository-change-detector
+          python scripts/deploy-agent.py --agent-dir agents/prompt/repository-change-detector

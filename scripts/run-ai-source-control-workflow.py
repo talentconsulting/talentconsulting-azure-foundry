@@ -376,8 +376,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--agents-dir",
-        default="agents",
-        help="Directory containing local agent manifests used to resolve deployed agent models.",
+        default="agents/prompt",
+        help="Directory containing local prompt-agent manifests used to resolve deployed agent models.",
     )
     parser.add_argument(
         "--repository-agent-name",

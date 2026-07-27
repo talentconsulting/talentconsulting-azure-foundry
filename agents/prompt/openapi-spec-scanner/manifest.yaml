@@ -1,0 +1,40 @@
+name: openapi-spec-scanner
+display_name: "OpenAPI Spec Scanner"
+description: "Recursively scans one GitHub directory and returns absolute file URLs for source files that define API controllers or mapped routes."
+version: "1.0.0"
+
+agent:
+  object: agent.version
+  kind: prompt
+  model: gpt-4o
+  reasoning:
+    effort: medium
+
+inputs:
+  sourceDirectoryUrl:
+    type: string
+    required: true
+    description: "Full HTTPS GitHub tree URL identifying the repository, ref, and directory to scan recursively."
+
+outputs:
+  type: json_schema
+  json_schema:
+    name: openapi_source_file_urls
+    strict: true
+    schema:
+      type: object
+      properties:
+        apiFiles:
+          type: array
+          items:
+            type: string
+      required:
+        - apiFiles
+      additionalProperties: false
+
+files:
+  instructions: instructions.md
+  tools: tools.yaml
+  guardrails: guardrails.md
+  evaluations: evaluations.md
+  release_notes: release-notes.md

@@ -48,7 +48,7 @@ There is one `specs` entry per `scannedFiles` entry. Infrastructure-only health 
 ## Project structure
 
 ```text
-talent-agent-openAI-generator/
+agents/hosted/openapi-spec-generator-hosted/
 ├── azure.yaml
 └── src/
     └── talent-agent-openAI-generator/

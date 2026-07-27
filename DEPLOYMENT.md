@@ -12,27 +12,17 @@
     └── run-service-catalogue-agent-chain.yml
 
 agents/
-├── openapi-spec-reviewer/
-│   ├── manifest.yaml
-│   ├── instructions.md
-│   ├── tools.yaml
-│   ├── guardrails.md
-│   ├── evaluations.md
-│   └── release-notes.md
-├── repository-change-detector/
-│   ├── manifest.yaml
-│   ├── instructions.md
-│   ├── tools.yaml
-│   ├── guardrails.md
-│   ├── evaluations.md
-│   └── release-notes.md
-└── repository-file-pr-creator/
-    ├── manifest.yaml
-    ├── instructions.md
-    ├── tools.yaml
-    ├── guardrails.md
-    ├── evaluations.md
-    └── release-notes.md
+├── hosted/
+│   └── openapi-spec-generator-hosted/
+│       ├── azure.yaml
+│       └── src/
+│           └── talent-agent-openAI-generator/
+└── prompt/
+    ├── openapi-spec-generator/
+    ├── openapi-spec-scanner/
+    ├── openapi-spec-reviewer/
+    ├── repository-change-detector/
+    └── repository-file-pr-creator/
 
 scripts/
 ├── deploy-agent.py
@@ -45,14 +35,6 @@ workflows/
 
 requirements-agent-deploy.txt
 
-talent-agent-openAI-generator/
-├── azure.yaml
-└── src/
-    └── talent-agent-openAI-generator/
-        ├── main.py
-        ├── github_scanner.py
-        ├── spec_generator.py
-        └── eval.yaml
 ```
 
 ## Local Deployment
@@ -72,32 +54,44 @@ export AZURE_AI_PROJECT_ENDPOINT="https://<your-ai-service>.services.ai.azure.co
 Deploy one agent:
 
 ```bash
-python scripts/deploy-agent.py --agent-dir agents/repository-change-detector
+python scripts/deploy-agent.py --agent-dir agents/prompt/repository-change-detector
+```
+
+Deploy the single-file prompt OpenAPI generator:
+
+```bash
+python scripts/deploy-agent.py --agent-dir agents/prompt/openapi-spec-generator
+```
+
+Deploy the OpenAPI source scanner:
+
+```bash
+python scripts/deploy-agent.py --agent-dir agents/prompt/openapi-spec-scanner
 ```
 
 Deploy the hosted OpenAPI generator:
 
 ```bash
-cd talent-agent-openAI-generator
+cd agents/hosted/openapi-spec-generator-hosted
 azd deploy talent-agent-openAI-generator --no-prompt
 ```
 
 Or:
 
 ```bash
-python scripts/deploy-agent.py --agent-dir agents/openapi-spec-reviewer
+python scripts/deploy-agent.py --agent-dir agents/prompt/openapi-spec-reviewer
 ```
 
 Or:
 
 ```bash
-python scripts/deploy-agent.py --agent-dir agents/repository-file-pr-creator
+python scripts/deploy-agent.py --agent-dir agents/prompt/repository-file-pr-creator
 ```
 
 Force creation of a new agent/version:
 
 ```bash
-python scripts/deploy-agent.py --agent-dir agents/repository-change-detector --create-new-version
+python scripts/deploy-agent.py --agent-dir agents/prompt/repository-change-detector --create-new-version
 ```
 
 Validate the service catalogue workflow source:
@@ -229,13 +223,13 @@ Required manual inputs:
 Example changed file:
 
 ```text
-agents/repository-change-detector/instructions.md
+agents/prompt/repository-change-detector/instructions.md
 ```
 
 Deploy command run by the workflow:
 
 ```bash
-python scripts/deploy-agent.py --agent-dir agents/repository-change-detector
+python scripts/deploy-agent.py --agent-dir agents/prompt/repository-change-detector
 ```
 
 ## Manual Deployment
@@ -268,4 +262,4 @@ The workflow definition declares this sequence:
 
 - `manifest.yaml`, `instructions.md`, `guardrails.md`, and `tools.yaml` are assembled into the deployed Azure AI Foundry agent.
 - `evaluations.md` and `release-notes.md` are kept for governance and review.
-- Prompt agents remain under `agents/`; hosted Python agents use their own azd project directory.
+- Prompt agents live under `agents/prompt/`; hosted Python agents live under `agents/hosted/`.

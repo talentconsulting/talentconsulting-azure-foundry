@@ -3,7 +3,7 @@ name: Deploy OpenAPI Spec Reviewer
 on:
   push:
     paths:
-      - "agents/openapi-spec-reviewer/**"
+      - "agents/prompt/openapi-spec-reviewer/**"
       - "scripts/deploy-agent.py"
       - "requirements-agent-deploy.txt"
       - ".github/workflows/deploy-openapi-spec-reviewer.agent.yml"
@@ -71,4 +71,4 @@ jobs:
 
       - name: Deploy OpenAPI Spec Reviewer
         run: |
-          python scripts/deploy-agent.py --agent-dir agents/openapi-spec-reviewer
+          python scripts/deploy-agent.py --agent-dir agents/prompt/openapi-spec-reviewer

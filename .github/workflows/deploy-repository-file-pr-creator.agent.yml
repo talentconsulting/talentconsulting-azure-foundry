@@ -3,7 +3,7 @@ name: Deploy Repository File PR Creator
 on:
   push:
     paths:
-      - "agents/repository-file-pr-creator/**"
+      - "agents/prompt/repository-file-pr-creator/**"
       - "scripts/deploy-agent.py"
       - "requirements-agent-deploy.txt"
       - ".github/workflows/deploy-repository-file-pr-creator.agent.yml"
@@ -71,4 +71,4 @@ jobs:
 
       - name: Deploy Repository File PR Creator
         run: |
-          python scripts/deploy-agent.py --agent-dir agents/repository-file-pr-creator
+          python scripts/deploy-agent.py --agent-dir agents/prompt/repository-file-pr-creator

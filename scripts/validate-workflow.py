@@ -37,7 +37,24 @@ def load_agent_names(agents_dir: Path) -> set[str]:
     return names
 
 
-def validate_manifest(workflow_dir: Path, agents_dir: Path, runtime_script: Path) -> None:
+def load_hosted_agent_names(hosted_agents_dir: Path) -> set[str]:
+    names: set[str] = set()
+    for azure_path in sorted(hosted_agents_dir.glob("*/azure.yaml")):
+        project = read_yaml(azure_path)
+        for service_name, service in project.get("services", {}).items():
+            if isinstance(service, dict) and service.get("host") == "azure.ai.agent":
+                deployed_name = service.get("name") or service_name
+                if isinstance(deployed_name, str) and deployed_name:
+                    names.add(deployed_name)
+    return names
+
+
+def validate_manifest(
+    workflow_dir: Path,
+    agents_dir: Path,
+    hosted_agents_dir: Path,
+    runtime_script: Path,
+) -> None:
     manifest_path = workflow_dir / "manifest.yaml"
     manifest = read_yaml(manifest_path)
 
@@ -51,7 +68,9 @@ def validate_manifest(workflow_dir: Path, agents_dir: Path, runtime_script: Path
     if not isinstance(agents, dict) or not agents:
         raise ValueError(f"{manifest_path} field 'agents' must be a non-empty object.")
 
-    known_agent_names = load_agent_names(agents_dir)
+    known_agent_names = load_agent_names(agents_dir) | load_hosted_agent_names(
+        hosted_agents_dir
+    )
     referenced_agent_keys = set()
     for agent_key, agent_config in agents.items():
         if not isinstance(agent_config, dict):
@@ -64,7 +83,8 @@ def validate_manifest(workflow_dir: Path, agents_dir: Path, runtime_script: Path
         if agent_name not in known_agent_names:
             raise ValueError(
                 f"agents.{agent_key}.name references '{agent_name}', but no matching "
-                f"agent manifest was found under {agents_dir}."
+                f"prompt manifest or hosted service was found under {agents_dir} "
+                f"or {hosted_agents_dir}."
             )
 
     steps = manifest["steps"]
@@ -124,8 +144,13 @@ def main() -> None:
     )
     parser.add_argument(
         "--agents-dir",
-        default="agents",
-        help="Path to the source-controlled agents directory.",
+        default="agents/prompt",
+        help="Path to the source-controlled prompt agents directory.",
+    )
+    parser.add_argument(
+        "--hosted-agents-dir",
+        default="agents/hosted",
+        help="Path to the source-controlled hosted agent projects directory.",
     )
     parser.add_argument(
         "--runtime-script",
@@ -139,6 +164,7 @@ def main() -> None:
         validate_manifest(
             workflow_dir=Path(args.workflow_dir),
             agents_dir=Path(args.agents_dir),
+            hosted_agents_dir=Path(args.hosted_agents_dir),
             runtime_script=Path(args.runtime_script),
         )
     except (FileNotFoundError, ValueError) as exc:

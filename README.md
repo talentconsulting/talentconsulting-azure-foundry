@@ -2,7 +2,7 @@
 
 This repository is a source-control example for storing, reviewing, deploying, and running AI agents and related governance evidence.
 
-The current template contains prompt agents and the hosted Python agent [`talent-agent-openAI-generator`](talent-agent-openAI-generator/README.md). The hosted agent recursively scans a public GitHub tree URL and produces complete OpenAPI 3.1 specifications for its ASP.NET controllers.
+The current template contains prompt agents and the hosted Python agent [`talent-agent-openAI-generator`](agents/hosted/openapi-spec-generator-hosted/README.md). The hosted agent recursively scans a public GitHub tree URL and produces complete OpenAPI 3.1 specifications for its ASP.NET controllers.
 
 ## Repository Structure
 
@@ -17,35 +17,21 @@ The current template contains prompt agents and the hosted Python agent [`talent
 │       ├── deploy-repository-change-detector.agent.yml
 │       └── run-service-catalogue-agent-chain.yml
 ├── agents/
-│   ├── openapi-spec-reviewer/
-│   │   ├── evaluations.md
-│   │   ├── guardrails.md
-│   │   ├── instructions.md
-│   │   ├── manifest.yaml
-│   │   ├── release-notes.md
-│   │   └── tools.yaml
-│   ├── repository-change-detector/
-│   │   ├── evaluations.md
-│   │   ├── guardrails.md
-│   │   ├── instructions.md
-│   │   ├── manifest.yaml
-│   │   ├── release-notes.md
-│   │   └── tools.yaml
-│   └── repository-file-pr-creator/
-│       ├── evaluations.md
-│       ├── guardrails.md
-│       ├── instructions.md
-│       ├── manifest.yaml
-│       ├── release-notes.md
-│       └── tools.yaml
-├── talent-agent-openAI-generator/
-│   ├── azure.yaml
-│   └── src/
-│       └── talent-agent-openAI-generator/
-│           ├── main.py
-│           ├── github_scanner.py
-│           ├── spec_generator.py
-│           └── eval.yaml
+│   ├── hosted/
+│   │   └── openapi-spec-generator-hosted/
+│   │       ├── azure.yaml
+│   │       └── src/
+│   │           └── talent-agent-openAI-generator/
+│   │               ├── main.py
+│   │               ├── github_scanner.py
+│   │               ├── spec_generator.py
+│   │               └── eval.yaml
+│   └── prompt/
+│       ├── openapi-spec-generator/
+│       ├── openapi-spec-scanner/
+│       ├── openapi-spec-reviewer/
+│       ├── repository-change-detector/
+│       └── repository-file-pr-creator/
 ├── scripts/
 │   ├── deploy-agent.py
 │   ├── validate-workflow.py
@@ -65,15 +51,12 @@ The current template contains prompt agents and the hosted Python agent [`talent
 | Path | Purpose |
 | --- | --- |
 | `.github/workflows/` | GitHub Actions workflows for deploying agents and running the service catalogue agent chain. |
-| `agents/repository-change-detector/manifest.yaml` | Agent metadata, model configuration, inputs, outputs, and file references. |
-| `agents/repository-change-detector/instructions.md` | Core task instructions for the agent. |
-| `agents/repository-change-detector/tools.yaml` | Tool definitions and permissions used by the agent. |
-| `agents/repository-change-detector/guardrails.md` | Read-only, data-access, output, and failure-behaviour controls. |
-| `agents/repository-change-detector/evaluations.md` | Governance and quality checks for expected behaviour. |
-| `agents/repository-change-detector/release-notes.md` | Release history and operational notes. |
-| [`talent-agent-openAI-generator/`](talent-agent-openAI-generator/README.md) | Active Python hosted agent that scans a GitHub tree URL and generates one OpenAPI specification per route-bearing controller. |
-| `agents/openapi-spec-reviewer/` | Agent source for reviewing generated OpenAPI specifications. |
-| `agents/repository-file-pr-creator/` | Agent source for creating branches, writing structured file content, and opening pull requests. |
+| `agents/prompt/repository-change-detector/` | Prompt agent that identifies repositories requiring downstream processing. |
+| [`agents/hosted/openapi-spec-generator-hosted/`](agents/hosted/openapi-spec-generator-hosted/README.md) | Active Python hosted agent project that deploys `talent-agent-openAI-generator`. |
+| `agents/prompt/openapi-spec-generator/` | Prompt agent that generates one OpenAPI specification from one GitHub source-file URL. |
+| `agents/prompt/openapi-spec-scanner/` | Prompt agent that scans a GitHub directory and returns absolute URLs for API source files. |
+| `agents/prompt/openapi-spec-reviewer/` | Prompt agent for reviewing generated OpenAPI specifications. |
+| `agents/prompt/repository-file-pr-creator/` | Prompt agent for creating branches, writing structured file content, and opening pull requests. |
 | `scripts/deploy-agent.py` | Deployment script that assembles the split agent files and deploys to Azure AI Foundry. |
 | `scripts/validate-workflow.py` | Validates the source-controlled workflow manifest and referenced agents. |
 | `scripts/run-ai-source-control-workflow.py` | Runtime script that invokes the repository-change detector first, then runs OpenAPI generation and pull request creation for changed repositories. |
@@ -85,10 +68,10 @@ The current template contains prompt agents and the hosted Python agent [`talent
 
 ## Agent Source Pattern
 
-Prompt agents live under `agents/<agent-name>/` and keep deployable behaviour separate from governance evidence:
+Prompt agents live under `agents/prompt/<agent-name>/` and keep deployable behaviour separate from governance evidence:
 
 ```text
-agents/<agent-name>/
+agents/prompt/<agent-name>/
 ├── manifest.yaml       # Required deployment metadata
 ├── instructions.md     # Required runtime instructions
 ├── tools.yaml          # Required tool definitions
@@ -99,7 +82,7 @@ agents/<agent-name>/
 
 This keeps AI behaviour reviewable in pull requests and gives governance standards a stable place to reference approved instructions, tools, evaluations, and release evidence.
 
-Hosted Python agents use an azd project at the repository root with runtime code under `src/<agent-name>/`. The active OpenAPI generator follows this structure in `talent-agent-openAI-generator/`.
+Hosted Python agents live under `agents/hosted/<project-name>/`, with runtime code under `src/<agent-name>/`.
 
 ## Local Deployment
 
@@ -118,32 +101,32 @@ export AZURE_AI_PROJECT_ENDPOINT="https://<your-ai-service>.services.ai.azure.co
 Deploy the agent:
 
 ```bash
-python scripts/deploy-agent.py --agent-dir agents/repository-change-detector
+python scripts/deploy-agent.py --agent-dir agents/prompt/repository-change-detector
 ```
 
 Deploy the hosted OpenAPI generator:
 
 ```bash
-cd talent-agent-openAI-generator
+cd agents/hosted/openapi-spec-generator-hosted
 azd deploy talent-agent-openAI-generator --no-prompt
 ```
 
 Or:
 
 ```bash
-python scripts/deploy-agent.py --agent-dir agents/openapi-spec-reviewer
+python scripts/deploy-agent.py --agent-dir agents/prompt/openapi-spec-reviewer
 ```
 
 Or:
 
 ```bash
-python scripts/deploy-agent.py --agent-dir agents/repository-file-pr-creator
+python scripts/deploy-agent.py --agent-dir agents/prompt/repository-file-pr-creator
 ```
 
 Force creation of a new agent or version:
 
 ```bash
-python scripts/deploy-agent.py --agent-dir agents/repository-change-detector --create-new-version
+python scripts/deploy-agent.py --agent-dir agents/prompt/repository-change-detector --create-new-version
 ```
 
 Validate the service catalogue workflow source:
@@ -172,7 +155,7 @@ Required repository secrets:
 | `AZURE_SUBSCRIPTION_ID` | Azure subscription ID. |
 | `AZURE_AI_PROJECT_ENDPOINT` | Azure AI Foundry project endpoint. |
 
-See the [hosted generator README](talent-agent-openAI-generator/README.md) for its local run, invocation, deployment, and evaluation commands. See [DEPLOYMENT.md](DEPLOYMENT.md) for the remaining prompt-agent and workflow deployment guidance.
+See the [hosted generator README](agents/hosted/openapi-spec-generator-hosted/README.md) for its local run, invocation, deployment, and evaluation commands. See [DEPLOYMENT.md](DEPLOYMENT.md) for the remaining prompt-agent and workflow deployment guidance.
 
 ## Chained Workflow
 

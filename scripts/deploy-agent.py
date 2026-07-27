@@ -49,7 +49,7 @@ def main() -> None:
     parser.add_argument(
         "--agent-dir",
         required=True,
-        help="Path to the agent source directory, for example agents/repository-change-detector."
+        help="Path to the agent source directory, for example agents/prompt/repository-change-detector."
     )
     parser.add_argument(
         "--project-endpoint",
