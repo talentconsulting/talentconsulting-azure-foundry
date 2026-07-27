@@ -1,5 +1,7 @@
 # Evaluations
 
+These evaluations assess the generator as a single base-path scan. Unless an input names a file explicitly, the generator receives the directory once and is responsible for recursive discovery; the caller does not pre-discover or invoke it once per controller.
+
 ## Evaluation 1: No Endpoints Found
 
 ### Input
@@ -306,3 +308,137 @@ The response must:
 - Use `contentType: application/json`.
 - Use `.json` filenames.
 - Include no markdown or prose.
+
+## Evaluation 7: Base Path Means The Full Descendant Tree
+
+### Input
+
+```json
+{
+  "repository": "org/example-api",
+  "scanPath": "services"
+}
+```
+
+### Source Pattern
+
+```text
+services/
+  orders/
+    src/
+      http/
+        controllers/
+          OrdersController.cs
+  customers/
+    app/
+      routes/
+        customers.py
+  shared/
+    models/
+      ErrorResponse.cs
+```
+
+Both route-bearing files define application endpoints. `ErrorResponse.cs` is referenced by one of them.
+
+### Expected Behaviour
+
+- Recursively discover both route-bearing files from the single `services` input.
+- Return one non-empty spec for the orders controller and one for the customers router.
+- Use the shared model as supporting schema evidence where applicable.
+- Do not require the caller to submit either route-bearing file as a separate `scanPath`.
+- Do not stop after discovering the first framework or first service.
+
+Returning only one spec, scanning only direct children of `services`, or treating `services` as a service name without walking its descendants is invalid.
+
+## Evaluation 8: Mounted Prefixes Are Resolved Across Files
+
+### Source Pattern
+
+```javascript
+// src/server.js
+app.use("/api/v2/orders", ordersRouter);
+
+// src/routes/orders.js
+router.get("/", listOrders);
+router.get("/:orderId", getOrder);
+router.post("/", createOrder);
+```
+
+### Expected Behaviour
+
+The spec whose `sourcePath` is `src/routes/orders.js` includes:
+
+- `GET /api/v2/orders`
+- `POST /api/v2/orders`
+- `GET /api/v2/orders/{orderId}`
+
+It is invalid to emit only `/`, `/{orderId}`, or unmounted route fragments when the effective prefix is resolvable below the supplied base path.
+
+## Evaluation 9: Inventory Completeness Before Output
+
+### Source Pattern
+
+```text
+src/
+  Program.cs
+  Admin/
+    Controllers/AdminController.cs
+  Features/
+    Orders/OrdersEndpoints.cs
+    Search/SearchRoutes.ts
+  Functions/
+    Export/function.json
+    Export/index.js
+  generated/
+    client/
+  node_modules/
+```
+
+The controller, minimal endpoint file, TypeScript router, and HTTP-trigger function each expose application endpoints. The dependency and generated-client trees do not.
+
+### Expected Behaviour
+
+- Inspect and classify all relevant descendants before returning.
+- Return one spec for each of the four route-bearing sources.
+- Exclude dependency code and generated client code from API discovery.
+- Do not return a partial result merely because `Program.cs` or `AdminController.cs` produced a valid spec first.
+
+## Evaluation 10: Existing Specification Does Not End Discovery
+
+### Source Pattern
+
+```text
+src/
+  openapi/
+    public-api.yaml
+  internal/
+    Controllers/InternalController.cs
+```
+
+Both files describe or define endpoints.
+
+### Expected Behaviour
+
+Return one spec preserving the existing public API document and one spec for the internal controller. Finding `public-api.yaml` must not end the recursive scan.
+
+## Evaluation 11: No Invented API From Names Alone
+
+### Source Pattern
+
+```text
+src/
+  Api/
+    ApiClient.cs
+    OrderDto.cs
+    README.txt
+```
+
+No file registers, maps, attributes, or documents an inbound HTTP endpoint.
+
+### Expected Behaviour
+
+Return:
+
+`{"specs":[]}`
+
+Directory names, client code, and DTOs alone are not executable routing evidence.
