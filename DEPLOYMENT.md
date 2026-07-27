@@ -19,13 +19,6 @@ agents/
 │   ├── guardrails.md
 │   ├── evaluations.md
 │   └── release-notes.md
-├── openapi-specs-generator/
-│   ├── manifest.yaml
-│   ├── instructions.md
-│   ├── tools.yaml
-│   ├── guardrails.md
-│   ├── evaluations.md
-│   └── release-notes.md
 ├── repository-change-detector/
 │   ├── manifest.yaml
 │   ├── instructions.md
@@ -51,6 +44,15 @@ workflows/
     └── manifest.yaml
 
 requirements-agent-deploy.txt
+
+talent-agent-openAI-generator/
+├── azure.yaml
+└── src/
+    └── talent-agent-openAI-generator/
+        ├── main.py
+        ├── github_scanner.py
+        ├── spec_generator.py
+        └── eval.yaml
 ```
 
 ## Local Deployment
@@ -73,10 +75,11 @@ Deploy one agent:
 python scripts/deploy-agent.py --agent-dir agents/repository-change-detector
 ```
 
-Or:
+Deploy the hosted OpenAPI generator:
 
 ```bash
-python scripts/deploy-agent.py --agent-dir agents/openapi-specs-generator
+cd talent-agent-openAI-generator
+azd deploy talent-agent-openAI-generator --no-prompt
 ```
 
 Or:
@@ -220,6 +223,7 @@ Required manual inputs:
 |---|---|
 | `manifest_repository` | `TalentConsulting/DomainExplorer` |
 | `manifest_path` | `repoManifest.json` |
+| `source_branch` | `main` |
 | `scan_path` | empty repository root |
 
 Example changed file:
@@ -257,11 +261,11 @@ workflows/service-catalogue/manifest.yaml
 The workflow definition declares this sequence:
 
 1. `repository-change-detector`
-2. `openapi-spec-generator` for each repository returned by the first agent
+2. `talent-agent-openAI-generator` for each repository returned by the first agent
 3. `repository-file-pr-creator` for each repository returned by the first agent
 
 ## Notes
 
 - `manifest.yaml`, `instructions.md`, `guardrails.md`, and `tools.yaml` are assembled into the deployed Azure AI Foundry agent.
 - `evaluations.md` and `release-notes.md` are kept for governance and review.
-- This structure supports adding more agents under the `agents/` folder without creating more workflow files.
+- Prompt agents remain under `agents/`; hosted Python agents use their own azd project directory.

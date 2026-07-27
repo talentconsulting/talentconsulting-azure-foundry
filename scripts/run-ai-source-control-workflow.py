@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import re
+import urllib.parse
 import uuid
 from pathlib import Path
 from typing import Any
@@ -33,8 +34,13 @@ def load_agent_models(agents_dir: Path) -> dict[str, str]:
     return models
 
 
-def get_agent_model(agent_models: dict[str, str], agent_name: str) -> str:
-    model = agent_models.get(agent_name)
+def get_agent_model(
+    agent_models: dict[str, str],
+    agent_name: str,
+    workflow_agent: dict[str, Any] | None = None,
+) -> str:
+    configured_model = (workflow_agent or {}).get("model")
+    model = configured_model or agent_models.get(agent_name)
     if not model:
         raise ValueError(
             f"No local agent manifest found for deployed agent '{agent_name}', "
@@ -123,6 +129,18 @@ def normalize_repository_ref(value: str) -> str:
     return repository
 
 
+def build_github_tree_url(repository: str, branch: str, scan_path: str) -> str:
+    repository_ref = normalize_repository_ref(repository)
+    normalized_branch = branch.strip()
+    if not normalized_branch:
+        raise ValueError("Scan branch must be a non-empty Git branch or ref.")
+    encoded_branch = urllib.parse.quote(normalized_branch, safe="")
+    source_url = f"https://github.com/{repository_ref}/tree/{encoded_branch}"
+    if scan_path:
+        source_url += f"/{urllib.parse.quote(scan_path, safe='/')}"
+    return source_url
+
+
 def build_branch_name(repository: str) -> str:
     repository_part = safe_file_name(repository.replace("/", "-"), "repository")
     run_id = os.getenv("GITHUB_RUN_ID")
@@ -161,8 +179,24 @@ def validate_repository_detector_output(payload: dict[str, Any]) -> None:
 
 
 def validate_openapi_output(payload: dict[str, Any]) -> None:
-    if set(payload) != {"specs"}:
-        raise ValueError("OpenAPI generator response must contain only specs.")
+    if set(payload) != {"scannedFiles", "specs"}:
+        raise ValueError(
+            "OpenAPI generator response must contain only scannedFiles and specs."
+        )
+
+    scanned_files = payload.get("scannedFiles")
+    if not isinstance(scanned_files, list):
+        raise ValueError("OpenAPI generator response must contain a scannedFiles array.")
+    if any(not isinstance(path, str) or not path for path in scanned_files):
+        raise ValueError("OpenAPI generator scannedFiles entries must be non-empty strings.")
+    if scanned_files != sorted(set(scanned_files)):
+        raise ValueError(
+            "OpenAPI generator scannedFiles must be sorted and contain no duplicates."
+        )
+    if any(path.startswith(("/", "\\")) or ".." in Path(path).parts for path in scanned_files):
+        raise ValueError(
+            "OpenAPI generator scannedFiles entries must be repository-relative paths."
+        )
 
     specs = payload.get("specs")
     if not isinstance(specs, list):
@@ -188,6 +222,10 @@ def validate_openapi_output(payload: dict[str, Any]) -> None:
         if not isinstance(spec["sourcePath"], str) or not spec["sourcePath"]:
             raise ValueError(f"specs[{index}].sourcePath must be a non-empty string.")
         source_path = spec["sourcePath"].replace("\\", "/").strip("/")
+        if source_path not in scanned_files:
+            raise ValueError(
+                f"specs[{index}].sourcePath must also appear in scannedFiles."
+            )
         if not source_path.lower().endswith((".cs", ".json", ".yaml", ".yml")):
             raise ValueError(
                 f"specs[{index}].sourcePath must be a source file path, not a folder."
@@ -324,7 +362,12 @@ def main() -> None:
     parser.add_argument(
         "--scan-path",
         default=".",
-        help="Path passed to the OpenAPI specs generator for each changed repository.",
+        help="Path encoded into the GitHub tree URL for each changed repository.",
+    )
+    parser.add_argument(
+        "--scan-branch",
+        required=True,
+        help="Branch or ref encoded into the GitHub tree URL for each changed repository.",
     )
     parser.add_argument(
         "--workflow-dir",
@@ -370,6 +413,9 @@ def main() -> None:
             "or pass --project-endpoint."
         )
     scan_path = normalize_scan_path(args.scan_path)
+    scan_branch = args.scan_branch.strip()
+    if not scan_branch:
+        raise ValueError("--scan-branch must not be empty.")
     manifest_repository_ref = normalize_repository_ref(args.manifest_repository)
 
     workflow = read_yaml(Path(args.workflow_dir) / "manifest.yaml")
@@ -379,13 +425,17 @@ def main() -> None:
         workflow, "repository_change_detector", "repository-change-detector"
     )
     openapi_agent_name = args.openapi_agent_name or get_agent_name(
-        workflow, "openapi_specs_generator", "openapi-spec-generator"
+        workflow, "openapi_specs_generator", "talent-agent-openAI-generator"
     )
     pr_creator_agent_name = args.pr_creator_agent_name or get_agent_name(
         workflow, "repository_file_pr_creator", "repository-file-pr-creator"
     )
     repository_agent_model = get_agent_model(agent_models, repository_agent_name)
-    openapi_agent_model = get_agent_model(agent_models, openapi_agent_name)
+    openapi_agent_model = get_agent_model(
+        agent_models,
+        openapi_agent_name,
+        workflow.get("agents", {}).get("openapi_specs_generator", {}),
+    )
     pr_creator_agent_model = get_agent_model(agent_models, pr_creator_agent_name)
     output_dir = Path(args.output_dir) if args.output_dir else get_output_dir(
         workflow, "outputs/ai-source-control-workflow"
@@ -432,13 +482,13 @@ def main() -> None:
         repository_name = repository["repoName"]
         repository_ref = repository["repository"]
         repository_output_dir = safe_file_name(repository_ref.replace("/", "-"), "repository")
+        source_url = build_github_tree_url(repository_ref, scan_branch, scan_path)
         print(
             f"Invoking generator once for {repository_ref} "
-            f"with base scan path {scan_path or '.'}."
+            f"with source URL {source_url}."
         )
         generator_input = {
-            "repository": repository_ref,
-            "scanPath": scan_path,
+            "sourceUrl": source_url,
         }
         openapi_output = invoke_agent(
             project,
@@ -453,6 +503,7 @@ def main() -> None:
             "repoURL": repository["repoURL"],
             "repository": repository_ref,
             "pullRequestRepository": manifest_repository_ref,
+            "scannedFiles": openapi_output["scannedFiles"],
             "specs": openapi_output["specs"],
             "pullRequest": None,
             "skipped": False,

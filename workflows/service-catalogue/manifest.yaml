@@ -24,6 +24,11 @@ inputs:
     required: true
     default: ""
     description: "Path to scan in each changed repository."
+  source_branch:
+    type: string
+    required: true
+    default: main
+    description: "Branch encoded into the GitHub tree URL supplied to the OpenAPI generator."
 agents:
   repository_change_detector:
     name: repository-change-detector
@@ -31,10 +36,10 @@ agents:
       manifestRepository: manifest_repository
       manifestPath: manifest_path
   openapi_specs_generator:
-    name: openapi-spec-generator
+    name: talent-agent-openAI-generator
+    model: gpt-4o
     input_map:
-      repository: repository
-      scanPath: scan_path
+      sourceUrl: source_url
   repository_file_pr_creator:
     name: repository-file-pr-creator
     input_map:

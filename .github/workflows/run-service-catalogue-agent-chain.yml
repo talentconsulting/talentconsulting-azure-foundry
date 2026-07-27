@@ -14,6 +14,10 @@ on:
         description: "Path to scan in each changed repository. Leave empty for the repository root."
         required: false
         default: ""
+      source_branch:
+        description: "Branch to scan in each changed repository."
+        required: true
+        default: "main"
 
 jobs:
   run:
@@ -85,6 +89,7 @@ jobs:
           python scripts/run-ai-source-control-workflow.py \
             --manifest-repository "${{ inputs.manifest_repository }}" \
             --manifest-path "${{ inputs.manifest_path }}" \
+            --scan-branch "${{ inputs.source_branch }}" \
             --scan-path "${{ inputs.scan_path }}" \
             --output-dir "$OUTPUT_DIR"
 

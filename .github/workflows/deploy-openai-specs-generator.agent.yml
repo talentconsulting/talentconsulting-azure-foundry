@@ -3,9 +3,7 @@ name: Deploy OpenAPI Specs Generator
 on:
   push:
     paths:
-      - "agents/openapi-specs-generator/**"
-      - "scripts/deploy-agent.py"
-      - "requirements-agent-deploy.txt"
+      - "talent-agent-openAI-generator/**"
       - ".github/workflows/deploy-openai-specs-generator.agent.yml"
 
   workflow_dispatch:
@@ -25,6 +23,7 @@ jobs:
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       AZURE_AI_PROJECT_ENDPOINT: ${{ secrets.AZURE_AI_PROJECT_ENDPOINT }}
+      AZURE_AI_MODEL_DEPLOYMENT_NAME: ${{ vars.AZURE_AI_MODEL_DEPLOYMENT_NAME || 'gpt-4o' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -61,14 +60,23 @@ jobs:
           tenant-id: ${{ env.AZURE_TENANT_ID }}
           subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+      - uses: Azure/setup-azd@v2
 
-      - run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements-agent-deploy.txt
-
-      - name: Deploy OpenAPI Spec Generator
+      - name: Install Foundry extensions
+        working-directory: talent-agent-openAI-generator
         run: |
-          python scripts/deploy-agent.py --agent-dir agents/openapi-specs-generator
+          azd extension install azure.ai.agents
+          azd extension install azure.ai.projects
+          azd extension install microsoft.foundry
+
+      - name: Configure deployment environment
+        working-directory: talent-agent-openAI-generator
+        run: |
+          azd env new ci --no-prompt
+          azd env set AZURE_AI_PROJECT_ENDPOINT "$AZURE_AI_PROJECT_ENDPOINT"
+          azd env set AZURE_AI_MODEL_DEPLOYMENT_NAME "$AZURE_AI_MODEL_DEPLOYMENT_NAME"
+
+      - name: Deploy hosted OpenAPI Spec Generator
+        working-directory: talent-agent-openAI-generator
+        run: |
+          azd deploy talent-agent-openAI-generator --no-prompt

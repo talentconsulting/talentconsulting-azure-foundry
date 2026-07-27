@@ -2,7 +2,7 @@
 
 This repository is a source-control example for storing, reviewing, deploying, and running AI agents and related governance evidence.
 
-The current template contains deployable Azure AI Foundry agents, including `repository-change-detector`. That agent identifies repositories where a manifest entry is missing `latestCommit` or where `latestCommit` is out of date compared with GitHub.
+The current template contains prompt agents and the hosted Python agent [`talent-agent-openAI-generator`](talent-agent-openAI-generator/README.md). The hosted agent recursively scans a public GitHub tree URL and produces complete OpenAPI 3.1 specifications for its ASP.NET controllers.
 
 ## Repository Structure
 
@@ -24,13 +24,6 @@ The current template contains deployable Azure AI Foundry agents, including `rep
 │   │   ├── manifest.yaml
 │   │   ├── release-notes.md
 │   │   └── tools.yaml
-│   ├── openapi-specs-generator/
-│   │   ├── evaluations.md
-│   │   ├── guardrails.md
-│   │   ├── instructions.md
-│   │   ├── manifest.yaml
-│   │   ├── release-notes.md
-│   │   └── tools.yaml
 │   ├── repository-change-detector/
 │   │   ├── evaluations.md
 │   │   ├── guardrails.md
@@ -45,6 +38,14 @@ The current template contains deployable Azure AI Foundry agents, including `rep
 │       ├── manifest.yaml
 │       ├── release-notes.md
 │       └── tools.yaml
+├── talent-agent-openAI-generator/
+│   ├── azure.yaml
+│   └── src/
+│       └── talent-agent-openAI-generator/
+│           ├── main.py
+│           ├── github_scanner.py
+│           ├── spec_generator.py
+│           └── eval.yaml
 ├── scripts/
 │   ├── deploy-agent.py
 │   ├── validate-workflow.py
@@ -70,7 +71,7 @@ The current template contains deployable Azure AI Foundry agents, including `rep
 | `agents/repository-change-detector/guardrails.md` | Read-only, data-access, output, and failure-behaviour controls. |
 | `agents/repository-change-detector/evaluations.md` | Governance and quality checks for expected behaviour. |
 | `agents/repository-change-detector/release-notes.md` | Release history and operational notes. |
-| `agents/openapi-specs-generator/` | Agent source for generating OpenAPI specifications from API repositories. |
+| [`talent-agent-openAI-generator/`](talent-agent-openAI-generator/README.md) | Active Python hosted agent that scans a GitHub tree URL and generates one OpenAPI specification per route-bearing controller. |
 | `agents/openapi-spec-reviewer/` | Agent source for reviewing generated OpenAPI specifications. |
 | `agents/repository-file-pr-creator/` | Agent source for creating branches, writing structured file content, and opening pull requests. |
 | `scripts/deploy-agent.py` | Deployment script that assembles the split agent files and deploys to Azure AI Foundry. |
@@ -84,7 +85,7 @@ The current template contains deployable Azure AI Foundry agents, including `rep
 
 ## Agent Source Pattern
 
-Each agent should live under `agents/<agent-name>/` and keep deployable behaviour separate from governance evidence:
+Prompt agents live under `agents/<agent-name>/` and keep deployable behaviour separate from governance evidence:
 
 ```text
 agents/<agent-name>/
@@ -97,6 +98,8 @@ agents/<agent-name>/
 ```
 
 This keeps AI behaviour reviewable in pull requests and gives governance standards a stable place to reference approved instructions, tools, evaluations, and release evidence.
+
+Hosted Python agents use an azd project at the repository root with runtime code under `src/<agent-name>/`. The active OpenAPI generator follows this structure in `talent-agent-openAI-generator/`.
 
 ## Local Deployment
 
@@ -118,10 +121,11 @@ Deploy the agent:
 python scripts/deploy-agent.py --agent-dir agents/repository-change-detector
 ```
 
-Or:
+Deploy the hosted OpenAPI generator:
 
 ```bash
-python scripts/deploy-agent.py --agent-dir agents/openapi-specs-generator
+cd talent-agent-openAI-generator
+azd deploy talent-agent-openAI-generator --no-prompt
 ```
 
 Or:
@@ -168,11 +172,11 @@ Required repository secrets:
 | `AZURE_SUBSCRIPTION_ID` | Azure subscription ID. |
 | `AZURE_AI_PROJECT_ENDPOINT` | Azure AI Foundry project endpoint. |
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for the full deployment guide.
+See the [hosted generator README](talent-agent-openAI-generator/README.md) for its local run, invocation, deployment, and evaluation commands. See [DEPLOYMENT.md](DEPLOYMENT.md) for the remaining prompt-agent and workflow deployment guidance.
 
 ## Chained Workflow
 
-Use `.github/workflows/run-service-catalogue-agent-chain.yml` to run the service catalogue chain from GitHub Actions. This calls the deployed Foundry agents one at a time from `scripts/run-ai-source-control-workflow.py`, passing only the validated JSON output needed by the next step. For each changed repository, the intended generator contract is one invocation with the configured base `scanPath`; the generator recursively inventories the full descendant code tree, resolves API routes and their supporting context, and returns one OpenAPI specification per route-bearing source file. The workflow then creates pull requests in the manifest repository supplied to the detector.
+Use `.github/workflows/run-service-catalogue-agent-chain.yml` to run the service catalogue chain from GitHub Actions. This calls the deployed Foundry agents one at a time from `scripts/run-ai-source-control-workflow.py`, passing only the validated JSON output needed by the next step. For each changed repository, the runner constructs one GitHub tree `sourceUrl` from the configured branch and base path. The generator recursively inventories that URL's full descendant code tree, resolves API routes and their supporting context, and returns one OpenAPI specification per route-bearing source file. The workflow then creates pull requests in the manifest repository supplied to the detector.
 
 The workflow chain is defined in `workflows/service-catalogue/manifest.yaml`, following the same source-controlled manifest pattern as the agents.
 

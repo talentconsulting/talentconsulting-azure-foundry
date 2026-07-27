@@ -1,0 +1,1 @@
+Deterministically scan every ASP.NET API controller beneath a public GitHub tree URL, report every scanned source file, and return one complete OpenAPI 3.1 JSON specification per controller. Output must be a single JSON object containing only scannedFiles and specs; every enumerated HTTP method and route must be present.

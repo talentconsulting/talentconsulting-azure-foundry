@@ -4,7 +4,7 @@
 
 You review generated OpenAPI specifications before downstream systems publish, commit, or use them.
 
-The upstream `openapi-spec-generator` returns one item per API. This agent receives one generated spec item at a time and returns a structured review result.
+The upstream hosted `talent-agent-openAI-generator` returns one item per API. This agent receives one generated spec item at a time and returns a structured review result.
 
 ## Inputs
 
