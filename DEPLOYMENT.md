@@ -1,282 +1,68 @@
-# Azure AI Agent Framework Deployment
+# Deployment
 
-## Directory Structure
+The pipeline uses an existing Azure AI Foundry project and four hosted agents. Deploy them in this order:
 
-```text
-.github/
-└── workflows/
-    ├── deploy-openapi-spec-reviewer.agent.yml
-    ├── deploy-openapi-spec-generator.agent.yml
-    ├── deploy-openapi-spec-workflow-hosted.agent.yml
-    ├── deploy-talent-openapi-file-scan.agent.yml
-    ├── deploy-repository-file-pr-creator.agent.yml
-    ├── deploy-repository-change-detector.agent.yml
-    └── run-service-catalogue-agent-chain.yml
+1. `openapi-source-discovery`
+2. `openapi-spec-generator`
+3. `openapi-spec-pr-creator`
+4. `openapi-spec-workflow`
 
-agents/
-├── hosted/
-│   ├── talent-openapi-file-scan/
-│   │   ├── azure.yaml
-│   │   └── src/
-│   │       └── talent-openapi-file-scan/
-│   └── openapi-spec-workflow-hosted/
-│       ├── azure.yaml
-│       └── src/
-│           └── openapi-spec-workflow-hosted/
-└── prompt/
-    ├── openapi-spec-generator/
-    ├── openapi-spec-scanner/
-    ├── openapi-spec-reviewer/
-    ├── repository-change-detector/
-    └── repository-file-pr-creator/
+## GitHub Actions configuration
 
-scripts/
-├── deploy-agent.py
-├── run-openapi-spec-generation-workflow.py
-├── validate-workflow.py
-└── run-ai-source-control-workflow.py
+Create a GitHub environment named `dev` with these secrets:
 
-workflows/
-├── openapi-spec-generation/
-│   └── manifest.yaml
-└── service-catalogue/
-    └── manifest.yaml
+| Secret | Used by | Purpose |
+| --- | --- | --- |
+| `AZURE_CLIENT_ID` | All deployments | Entra application or managed identity client ID for GitHub OIDC. |
+| `AZURE_TENANT_ID` | All deployments | Azure tenant ID. |
+| `AZURE_SUBSCRIPTION_ID` | All deployments | Azure subscription ID. |
+| `AZURE_AI_PROJECT_ENDPOINT` | All deployments | Existing Foundry project endpoint. |
 
-requirements-agent-deploy.txt
+The Azure identity needs deployment access to the Foundry project. The hosted workflow identity needs permission to invoke the other agents in that project.
 
-```
+Create a Foundry Custom keys project connection named `openapi-pr-github` with a write-only `github_token` field. Grant that fine-grained token access only to the destination specification repository, with:
 
-## Local Deployment
+- Metadata: read
+- Contents: read and write
+- Pull requests: read and write
 
-Install dependencies:
+The PR creator resolves the token from `${{connections.openapi-pr-github.credentials.github_token}}` when its sandbox starts. It is not stored in the agent definition, passed to the orchestration agent, or accepted in an agent request.
 
-```bash
-pip install -r requirements-agent-deploy.txt
-```
+Optional `dev` environment variables are:
 
-Set your Azure AI Foundry project endpoint:
+| Variable | Default |
+| --- | --- |
+| `AZURE_AI_MODEL_DEPLOYMENT_NAME` | `gpt-4o` |
+| `AZURE_LOCATION` | `uksouth` |
+| `AZURE_RESOURCE_GROUP` | `talent-day-rg` |
+| `AZURE_AI_ACCOUNT_NAME` | `talent-day-foundry` |
+| `AZURE_AI_PROJECT_NAME` | `talent-day-proj-default` |
+
+## Deployment workflows
+
+The following workflows run on changes to their agent on the default branch and support manual dispatch:
+
+- `.github/workflows/deploy-openapi-source-discovery.agent.yml`
+- `.github/workflows/deploy-openapi-spec-generator.agent.yml`
+- `.github/workflows/deploy-openapi-spec-pr-creator.agent.yml`
+- `.github/workflows/deploy-openapi-spec-workflow.agent.yml`
+
+The PR creator and workflow smoke tests use invalid input deliberately. This verifies the hosted Responses endpoint without writing to a repository during deployment.
+
+## Local deployment
+
+Authenticate Azure CLI and azd, configure each agent project's azd environment with the existing project endpoint, create the `openapi-pr-github` connection, and deploy in dependency order:
 
 ```bash
-export AZURE_AI_PROJECT_ENDPOINT="https://<your-ai-service>.services.ai.azure.com/api/projects/<your-project>"
+cd agents/hosted/openapi-spec-pr-creator
+azd deploy openapi-spec-pr-creator --no-prompt
 ```
 
-Deploy one agent:
+Then deploy the orchestrator:
 
 ```bash
-python scripts/deploy-agent.py --agent-dir agents/prompt/repository-change-detector
+cd ../openapi-spec-workflow
+azd deploy openapi-spec-workflow --no-prompt
 ```
 
-Deploy the single-file prompt OpenAPI generator:
-
-```bash
-python scripts/deploy-agent.py --agent-dir agents/prompt/openapi-spec-generator
-```
-
-Deploy the legacy prompt OpenAPI source scanner only if an older workflow still uses it:
-
-```bash
-python scripts/deploy-agent.py --agent-dir agents/prompt/openapi-spec-scanner
-```
-
-Deploy the hosted API and payload file scan:
-
-```bash
-cd agents/hosted/talent-openapi-file-scan
-azd deploy talent-openapi-file-scan --no-prompt
-```
-
-Deploy the hosted orchestration after the file scan and prompt generator:
-
-```bash
-cd agents/hosted/openapi-spec-workflow-hosted
-azd deploy openapi-spec-workflow-hosted --no-prompt
-```
-
-Or:
-
-```bash
-python scripts/deploy-agent.py --agent-dir agents/prompt/openapi-spec-reviewer
-```
-
-Or:
-
-```bash
-python scripts/deploy-agent.py --agent-dir agents/prompt/repository-file-pr-creator
-```
-
-Force creation of a new agent/version:
-
-```bash
-python scripts/deploy-agent.py --agent-dir agents/prompt/repository-change-detector --create-new-version
-```
-
-Validate the service catalogue workflow source:
-
-```bash
-python scripts/validate-workflow.py --workflow-dir workflows/service-catalogue
-```
-
-## GitHub Actions Deployment
-
-The workflows must live here:
-
-```text
-.github/workflows/deploy-openapi-spec-reviewer.agent.yml
-.github/workflows/deploy-openapi-spec-generator.agent.yml
-.github/workflows/deploy-talent-openapi-file-scan.agent.yml
-.github/workflows/deploy-repository-change-detector.agent.yml
-.github/workflows/deploy-repository-file-pr-creator.agent.yml
-.github/workflows/run-service-catalogue-agent-chain.yml
-```
-
-GitHub Actions will not discover workflows under the `agents/` folder.
-
-Add these repository secrets:
-
-| Secret | Description |
-|---|---|
-| `AZURE_CLIENT_ID` | Federated identity app/client ID used by GitHub Actions |
-| `AZURE_TENANT_ID` | Azure tenant ID |
-| `AZURE_SUBSCRIPTION_ID` | Azure subscription ID |
-| `AZURE_AI_PROJECT_ENDPOINT` | Azure AI Foundry project endpoint |
-
-These workflows use the GitHub environment `dev`. If the values are stored as environment secrets, create them under `Settings` -> `Environments` -> `dev` -> `Environment secrets`. If you store them as repository secrets instead, remove `environment: dev` from the workflows or keep duplicate values in the environment.
-
-If `azure/login` fails with `Not all values are present`, at least one of `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, or `AZURE_SUBSCRIPTION_ID` is missing, empty, or named differently in the repository or environment secrets.
-
-For GitHub OpenID Connect authentication, the app registration or managed identity must also have a federated credential that trusts this repository and branch or environment.
-
-## Creating `AZURE_CLIENT_ID`
-
-`AZURE_CLIENT_ID` is the Application client ID from a Microsoft Entra app registration, or the client ID from a user-assigned managed identity. For this workflow, use a Microsoft Entra app registration with GitHub OpenID Connect unless your organisation has standardised on managed identities.
-
-### Azure Portal
-
-1. Go to Microsoft Entra ID.
-2. Open App registrations.
-3. Select New registration.
-4. Name it, for example `github-ai-agent-deploy`.
-5. Leave supported account types as single tenant unless your organisation requires otherwise.
-6. Select Register.
-7. Copy Application client ID. Add it to GitHub as `AZURE_CLIENT_ID`.
-8. Copy Directory tenant ID. Add it to GitHub as `AZURE_TENANT_ID`.
-9. In Azure Subscriptions, copy the subscription ID. Add it to GitHub as `AZURE_SUBSCRIPTION_ID`.
-
-Then create a federated credential on the app registration:
-
-1. Open the app registration.
-2. Go to Certificates and secrets.
-3. Open Federated credentials.
-4. Select Add credential.
-5. Choose GitHub Actions deploying Azure resources.
-6. Enter the GitHub organisation, repository, entity type, and branch or environment used by the workflow.
-7. Save the credential.
-
-Finally, grant the app registration the required Azure RBAC role on the target resource group, Azure AI Foundry project resources, or subscription scope.
-
-### Azure CLI
-
-Set these values first:
-
-```bash
-subscription_id="<azure-subscription-id>"
-resource_group="<target-resource-group>"
-github_org="<github-org-or-user>"
-github_repo="<github-repo-name>"
-branch="main"
-app_name="github-ai-agent-deploy"
-```
-
-Create the app registration and service principal:
-
-```bash
-app_id=$(az ad app create --display-name "$app_name" --query appId -o tsv)
-az ad sp create --id "$app_id"
-```
-
-Create the federated credential for GitHub Actions on `main`:
-
-```bash
-az ad app federated-credential create \
-  --id "$app_id" \
-  --parameters "{\"name\":\"github-main\",\"issuer\":\"https://token.actions.githubusercontent.com\",\"subject\":\"repo:${github_org}/${github_repo}:ref:refs/heads/${branch}\",\"audiences\":[\"api://AzureADTokenExchange\"]}"
-```
-
-Grant Azure RBAC access. Start with the narrowest scope that lets the deployment update the agent:
-
-```bash
-az role assignment create \
-  --assignee "$app_id" \
-  --role "Azure AI Developer" \
-  --scope "/subscriptions/${subscription_id}/resourceGroups/${resource_group}"
-```
-
-Add these GitHub repository secrets:
-
-| Secret | Value |
-|---|---|
-| `AZURE_CLIENT_ID` | `$app_id` |
-| `AZURE_TENANT_ID` | Output from `az account show --query tenantId -o tsv` |
-| `AZURE_SUBSCRIPTION_ID` | `$subscription_id` |
-| `AZURE_AI_PROJECT_ENDPOINT` | Azure AI Foundry project endpoint |
-
-## Automatic Deployment
-
-On push to `main`, the `.agent.yml` workflows detect changed folders under `agents/` and deploy only those agents.
-
-## GitHub-Orchestrated Agent Chain
-
-Use `Run Service Catalogue Agent Chain` to execute the chain from GitHub Actions. This workflow invokes the deployed agents from `scripts/run-ai-source-control-workflow.py`, validates each JSON response, passes only the required JSON payload to the next agent, and uploads `service-catalogue-agent-chain-output`. The runner scans changed repositories for APIs, then creates pull requests in the manifest repository supplied to the detector. If no OpenAPI specs are generated for a repository, the runner records the repository as skipped and does not call the pull request creator for that repository.
-
-Required manual inputs:
-
-| Input | Default |
-|---|---|
-| `manifest_repository` | `TalentConsulting/DomainExplorer` |
-| `manifest_path` | `repoManifest.json` |
-| `source_branch` | `main` |
-| `scan_path` | empty repository root |
-
-Example changed file:
-
-```text
-agents/prompt/repository-change-detector/instructions.md
-```
-
-Deploy command run by the workflow:
-
-```bash
-python scripts/deploy-agent.py --agent-dir agents/prompt/repository-change-detector
-```
-
-## Manual Deployment
-
-Run the workflow manually and optionally provide:
-
-```text
-repository-change-detector
-```
-
-as the `agent_name` input.
-
-## Running The Chained AI Workflow
-
-Use the `Run Service Catalogue Agent Chain` GitHub Actions workflow to execute the source-controlled chain.
-
-The workflow source is defined in:
-
-```text
-workflows/service-catalogue/manifest.yaml
-```
-
-The workflow definition declares this sequence:
-
-1. `repository-change-detector`
-2. `openapi-spec-workflow-hosted` for each repository returned by the first agent; it invokes `talent-openapi-file-scan` and then `openapi-spec-generator`
-3. `repository-file-pr-creator` for each repository returned by the first agent
-
-## Notes
-
-- `manifest.yaml`, `instructions.md`, `guardrails.md`, and `tools.yaml` are assembled into the deployed Azure AI Foundry agent.
-- `evaluations.md` and `release-notes.md` are kept for governance and review.
-- Prompt agents live under `agents/prompt/`; hosted Python agents live under `agents/hosted/`.
+No destination repository is fixed at deployment time. Supply it as `targetRepository` whenever the workflow is invoked.

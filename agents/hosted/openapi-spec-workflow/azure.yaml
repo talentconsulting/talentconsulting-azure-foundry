@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+requiredVersions:
+  extensions:
+    azure.ai.agents: '>=1.0.0-beta.4'
+
+name: openapi-spec-workflow
+
+services:
+  openapi-spec-workflow:
+    project: src/openapi-spec-workflow
+    host: azure.ai.agent
+    language: python
+    uses:
+      - ai-project
+    codeConfiguration:
+      dependencyResolution: remote_build
+      entryPoint: main.py
+      runtime: python_3_13
+    container:
+      resources:
+        cpu: "0.5"
+        memory: 1Gi
+    description: Discovers API sources, generates OpenAPI specifications, and publishes them through a pull request.
+    environmentVariables:
+      - name: AZURE_AI_MODEL_DEPLOYMENT_NAME
+        value: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
+      - name: DISCOVERY_AGENT_NAME
+        value: ${DISCOVERY_AGENT_NAME}
+      - name: SPEC_GENERATOR_AGENT_NAME
+        value: ${SPEC_GENERATOR_AGENT_NAME}
+      - name: SPEC_PR_CREATOR_AGENT_NAME
+        value: ${SPEC_PR_CREATOR_AGENT_NAME}
+      - name: OPENAPI_MAX_CONCURRENCY
+        value: ${OPENAPI_MAX_CONCURRENCY}
+      - name: OPENAPI_MAX_FILES
+        value: ${OPENAPI_MAX_FILES}
+    kind: hosted
+    name: openapi-spec-workflow
+    displayName: OpenAPI Spec Workflow
+    protocols:
+      - protocol: responses
+        version: 2.0.0
+
+  ai-project:
+    host: azure.ai.project
+    endpoint: ${AZURE_AI_PROJECT_ENDPOINT}
+
+infra:
+  provider: microsoft.foundry

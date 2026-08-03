@@ -57,6 +57,8 @@ is supported by the supplied DTO files under components.schemas. When details ar
 minimal schema instead of inventing fields. Endpoint completeness is more important than prose.
 
 Return only the OpenAPI JSON object. It must use openapi 3.1.0 and contain info, paths, and components.
+Use the conventional top-level order: openapi, info, paths, then any other top-level sections, with
+components as the final top-level section.
 Do not use Markdown fences, comments, ellipses, TODOs, citations, explanations, or a wrapper object.
 """
 
@@ -251,6 +253,31 @@ def _foundry_completion(prompt: str) -> str:
     return response.output_text
 
 
+def order_openapi_document(document: dict[str, object]) -> dict[str, object]:
+    """Return a conventional, deterministic top-level OpenAPI presentation order."""
+    ordered: dict[str, object] = {
+        "openapi": document["openapi"],
+        "info": document["info"],
+        "paths": document["paths"],
+    }
+    optional_order = (
+        "jsonSchemaDialect",
+        "servers",
+        "webhooks",
+        "security",
+        "tags",
+        "externalDocs",
+    )
+    for key in optional_order:
+        if key in document:
+            ordered[key] = document[key]
+    known = {"openapi", "info", "paths", "components", *optional_order}
+    for key in sorted(document.keys() - known):
+        ordered[key] = document[key]
+    ordered["components"] = document["components"]
+    return ordered
+
+
 def validate_openapi(document: object) -> dict[str, object]:
     if not isinstance(document, dict):
         raise GenerationError("invalid_model_output", "Model output must be a JSON object.")
@@ -278,7 +305,7 @@ def validate_openapi(document: object) -> dict[str, object]:
         raise GenerationError("invalid_model_output", "Every OpenAPI path must start with '/'.")
     if not isinstance(document.get("components"), dict):
         raise GenerationError("invalid_model_output", "Model output must contain components.")
-    return document
+    return order_openapi_document(document)
 
 
 def generate_from_text(

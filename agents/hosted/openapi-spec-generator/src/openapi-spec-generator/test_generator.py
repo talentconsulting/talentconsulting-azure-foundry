@@ -71,6 +71,27 @@ class GenerationTests(unittest.TestCase):
         self.assertNotIn("specification", actual)
         self.assertIn("JSON", captured_prompt[0])
 
+    def test_orders_paths_near_the_top_and_components_last(self):
+        model_document = {
+            "components": {"schemas": {}},
+            "tags": [{"name": "Bids"}],
+            "info": {"title": "Bids API", "version": "1.0.0"},
+            "openapi": "3.1.0",
+            "servers": [{"url": "https://api.example.com"}],
+            "paths": {"/bids": {"get": {"responses": {"200": {"description": "OK"}}}}},
+        }
+
+        actual = generate_from_text(
+            json.dumps({"apiFile": API_URL, "supportingFiles": []}),
+            fetcher=lambda source: "source",
+            completion=lambda prompt: json.dumps(model_document),
+        )
+
+        self.assertEqual(
+            ["openapi", "info", "paths", "servers", "tags", "components"],
+            list(actual),
+        )
+
     def test_rejects_a_non_openapi_model_response(self):
         with self.assertRaises(GenerationError) as raised:
             generate_from_text(

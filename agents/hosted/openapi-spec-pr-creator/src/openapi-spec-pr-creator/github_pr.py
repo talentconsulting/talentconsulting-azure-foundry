@@ -1,0 +1,331 @@
+"""Validate generated specifications and publish them through the GitHub API."""
+
+from __future__ import annotations
+
+import base64
+import json
+import os
+import posixpath
+import re
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any, Callable
+
+
+MAX_SPECIFICATIONS = 100
+MAX_TOTAL_BYTES = 10 * 1024 * 1024
+REPOSITORY_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+BRANCH_PATTERN = re.compile(r"^[A-Za-z0-9._/-]+$")
+
+
+class PublicationError(ValueError):
+    """An expected validation or GitHub publication failure."""
+
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+
+
+@dataclass(frozen=True)
+class PlannedFile:
+    path: str
+    content: bytes
+    action: str
+
+
+class GitHubClient:
+    """Small GitHub REST client with deliberately narrow behavior."""
+
+    def __init__(self, token: str, api_url: str = "https://api.github.com"):
+        if not token:
+            raise PublicationError("missing_github_token", "GITHUB_PR_TOKEN is not configured.")
+        self.token = token
+        self.api_url = api_url.rstrip("/")
+
+    def request(self, method: str, path: str, payload: object | None = None) -> Any:
+        body = None
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {self.token}",
+            "User-Agent": "openapi-spec-pr-creator",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+        if payload is not None:
+            body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+            headers["Content-Type"] = "application/json"
+        request = urllib.request.Request(
+            f"{self.api_url}{path}", data=body, headers=headers, method=method
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                response_body = response.read()
+        except urllib.error.HTTPError as error:
+            detail = ""
+            try:
+                error_body = json.loads(error.read().decode("utf-8"))
+                detail = str(error_body.get("message", ""))
+            except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):
+                pass
+            message = f"GitHub API returned HTTP {error.code}."
+            if detail:
+                message += f" {detail}"
+            raise PublicationError("github_api_error", message) from error
+        except urllib.error.URLError as error:
+            raise PublicationError("github_unavailable", "The GitHub API could not be reached.") from error
+        if not response_body:
+            return {}
+        return json.loads(response_body.decode("utf-8"))
+
+
+def parse_request(input_text: str) -> dict[str, Any]:
+    try:
+        payload = json.loads(input_text)
+    except json.JSONDecodeError as error:
+        raise PublicationError("invalid_json", "Input must be one JSON object.") from error
+    if not isinstance(payload, dict):
+        raise PublicationError("invalid_input", "Input must be one JSON object.")
+    validate_request(payload)
+    return payload
+
+
+def normalize_repository(value: object) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise PublicationError("invalid_repository", "repository must identify a GitHub repository.")
+    repository = value.strip()
+    if repository.startswith("https://github.com/"):
+        parsed = urllib.parse.urlparse(repository)
+        if parsed.query or parsed.fragment:
+            raise PublicationError("invalid_repository", "repository must not contain a query or fragment.")
+        repository = parsed.path.strip("/")
+        if repository.endswith(".git"):
+            repository = repository[:-4]
+    if not REPOSITORY_PATTERN.fullmatch(repository):
+        raise PublicationError("invalid_repository", "repository must use owner/repository format.")
+    return repository
+
+
+def _clean_relative_path(value: object, field: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise PublicationError("invalid_input", f"{field} must be a non-empty relative path.")
+    cleaned = posixpath.normpath(value.strip().strip("/"))
+    if cleaned in {"", ".", ".."} or cleaned.startswith("../"):
+        raise PublicationError("invalid_input", f"{field} must stay inside the repository.")
+    return cleaned
+
+
+def _source_path(api_file: object) -> str:
+    if not isinstance(api_file, str):
+        raise PublicationError("invalid_specification", "apiFile must be a GitHub blob URL.")
+    parsed = urllib.parse.urlparse(api_file)
+    if (
+        parsed.scheme != "https"
+        or parsed.netloc.lower() != "github.com"
+        or parsed.username
+        or parsed.password
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise PublicationError("invalid_specification", "apiFile must be an HTTPS GitHub blob URL.")
+    parts = [urllib.parse.unquote(part) for part in parsed.path.split("/") if part]
+    if len(parts) < 5 or parts[2] != "blob":
+        raise PublicationError("invalid_specification", "apiFile must be an HTTPS GitHub blob URL.")
+    source_path = "/".join(parts[4:])
+    return _clean_relative_path(source_path, "apiFile path")
+
+
+def _output_path(target_directory: str, api_file: object) -> str:
+    source_path = _source_path(api_file)
+    root, _ = posixpath.splitext(source_path)
+    return posixpath.join(target_directory, f"{root}.openapi.json")
+
+
+def _validate_branch(value: str, field: str) -> str:
+    if (
+        not BRANCH_PATTERN.fullmatch(value)
+        or value.startswith(('/', '.'))
+        or value.endswith(('/', '.', '.lock'))
+        or '..' in value
+        or '//' in value
+    ):
+        raise PublicationError("invalid_input", f"{field} is not a valid Git branch name.")
+    return value
+
+
+def validate_request(payload: dict[str, Any]) -> dict[str, Any]:
+    repository = normalize_repository(payload.get("repository"))
+    specifications = payload.get("specifications")
+    if not isinstance(specifications, list) or not specifications:
+        raise PublicationError("invalid_specifications", "specifications must be a non-empty array.")
+    if len(specifications) > MAX_SPECIFICATIONS:
+        raise PublicationError("too_many_specifications", f"At most {MAX_SPECIFICATIONS} specifications are allowed.")
+    target_directory = _clean_relative_path(payload.get("targetDirectory", "openapi"), "targetDirectory")
+    validated: list[dict[str, Any]] = []
+    seen_paths: set[str] = set()
+    total_bytes = 0
+    for item in specifications:
+        if not isinstance(item, dict) or set(item) != {"apiFile", "specification"}:
+            raise PublicationError(
+                "invalid_specification",
+                "Each specifications element must contain exactly apiFile and specification.",
+            )
+        specification = item["specification"]
+        if not isinstance(specification, dict) or specification.get("openapi") != "3.1.0":
+            raise PublicationError("invalid_specification", "Each specification must be an OpenAPI 3.1.0 object.")
+        if not all(isinstance(specification.get(field), dict) for field in ("info", "paths", "components")):
+            raise PublicationError(
+                "invalid_specification",
+                "Each specification must contain info, paths, and components objects.",
+            )
+        output_path = _output_path(target_directory, item["apiFile"])
+        if output_path in seen_paths:
+            raise PublicationError("duplicate_output_path", f"Multiple specifications map to {output_path}.")
+        seen_paths.add(output_path)
+        content = (json.dumps(specification, indent=2) + "\n").encode("utf-8")
+        total_bytes += len(content)
+        validated.append({"apiFile": item["apiFile"], "path": output_path, "content": content})
+    if total_bytes > MAX_TOTAL_BYTES:
+        raise PublicationError("specifications_too_large", "Generated specification files exceed 10 MiB.")
+
+    result: dict[str, Any] = {
+        "repository": repository,
+        "specifications": validated,
+        "targetDirectory": target_directory,
+    }
+    for field in ("baseBranch", "branchName", "pullRequestTitle", "pullRequestBody"):
+        value = payload.get(field)
+        if value is not None:
+            if not isinstance(value, str) or not value.strip():
+                raise PublicationError("invalid_input", f"{field} must be a non-empty string.")
+            result[field] = (
+                _validate_branch(value.strip(), field)
+                if field in {"baseBranch", "branchName"}
+                else value.strip()
+            )
+    return result
+
+
+def default_branch_name() -> str:
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    return f"openapi-specs/{timestamp}-{uuid.uuid4().hex[:8]}"
+
+
+def _encoded(value: str) -> str:
+    return urllib.parse.quote(value, safe="")
+
+
+def _existing_content(client: GitHubClient, repository: str, path: str, branch: str) -> bytes | None:
+    endpoint = f"/repos/{repository}/contents/{urllib.parse.quote(path, safe='/')}?ref={_encoded(branch)}"
+    try:
+        response = client.request("GET", endpoint)
+    except PublicationError as error:
+        if error.code == "github_api_error" and "HTTP 404" in str(error):
+            return None
+        raise
+    if not isinstance(response, dict) or response.get("type") != "file":
+        raise PublicationError("github_api_error", f"Destination path {path} is not a file.")
+    try:
+        return base64.b64decode(str(response["content"]), validate=False)
+    except (KeyError, ValueError) as error:
+        raise PublicationError("github_api_error", f"GitHub returned invalid content for {path}.") from error
+
+
+def publish(
+    payload: dict[str, Any],
+    client: GitHubClient | None = None,
+    branch_factory: Callable[[], str] = default_branch_name,
+) -> dict[str, Any]:
+    request = validate_request(payload)
+    github = client or GitHubClient(os.environ.get("GITHUB_PR_TOKEN", ""))
+    repository = request["repository"]
+    metadata = github.request("GET", f"/repos/{repository}")
+    base_branch = request.get("baseBranch") or metadata.get("default_branch")
+    if not isinstance(base_branch, str) or not base_branch:
+        raise PublicationError("github_api_error", "GitHub did not return a default branch.")
+
+    planned: list[PlannedFile] = []
+    for item in request["specifications"]:
+        existing = _existing_content(github, repository, item["path"], base_branch)
+        action = "created" if existing is None else ("unchanged" if existing == item["content"] else "updated")
+        planned.append(PlannedFile(item["path"], item["content"], action))
+
+    files_written = [{"path": item.path, "action": item.action} for item in planned]
+    changed = [item for item in planned if item.action != "unchanged"]
+    if not changed:
+        return {
+            "success": True,
+            "status": "unchanged",
+            "repository": repository,
+            "branchName": "",
+            "commitSha": "",
+            "pullRequestUrl": "",
+            "pullRequestNumber": 0,
+            "filesWritten": files_written,
+            "errors": [],
+        }
+
+    ref = github.request("GET", f"/repos/{repository}/git/ref/heads/{_encoded(base_branch)}")
+    try:
+        base_sha = ref["object"]["sha"]
+    except (KeyError, TypeError) as error:
+        raise PublicationError("github_api_error", "GitHub returned an invalid base branch reference.") from error
+    commit = github.request("GET", f"/repos/{repository}/git/commits/{base_sha}")
+    try:
+        base_tree = commit["tree"]["sha"]
+    except (KeyError, TypeError) as error:
+        raise PublicationError("github_api_error", "GitHub returned an invalid base commit.") from error
+
+    tree_items = []
+    for item in changed:
+        blob = github.request(
+            "POST",
+            f"/repos/{repository}/git/blobs",
+            {"content": base64.b64encode(item.content).decode("ascii"), "encoding": "base64"},
+        )
+        tree_items.append({"path": item.path, "mode": "100644", "type": "blob", "sha": blob["sha"]})
+    tree = github.request(
+        "POST", f"/repos/{repository}/git/trees", {"base_tree": base_tree, "tree": tree_items}
+    )
+    new_commit = github.request(
+        "POST",
+        f"/repos/{repository}/git/commits",
+        {
+            "message": "Update generated OpenAPI specifications",
+            "tree": tree["sha"],
+            "parents": [base_sha],
+        },
+    )
+    commit_sha = new_commit["sha"]
+    branch_name = request.get("branchName") or branch_factory()
+    github.request(
+        "POST",
+        f"/repos/{repository}/git/refs",
+        {"ref": f"refs/heads/{branch_name}", "sha": commit_sha},
+    )
+    pull_request = github.request(
+        "POST",
+        f"/repos/{repository}/pulls",
+        {
+            "title": request.get("pullRequestTitle", "Update generated OpenAPI specifications"),
+            "head": branch_name,
+            "base": base_branch,
+            "body": request.get(
+                "pullRequestBody",
+                "Generated by the OpenAPI source discovery and specification workflow.",
+            ),
+        },
+    )
+    return {
+        "success": True,
+        "status": "created",
+        "repository": repository,
+        "branchName": branch_name,
+        "commitSha": commit_sha,
+        "pullRequestUrl": pull_request["html_url"],
+        "pullRequestNumber": pull_request["number"],
+        "filesWritten": files_written,
+        "errors": [],
+    }

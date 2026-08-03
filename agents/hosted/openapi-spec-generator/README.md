@@ -36,6 +36,8 @@ The response is the OpenAPI document itself, not a wrapper and not Markdown:
 }
 ```
 
+The top-level fields are returned in a deterministic presentation order: `openapi`, `info`, `paths`, any additional OpenAPI sections, and `components` last.
+
 Generation failures remain valid JSON and use an `error` object instead of an incomplete specification.
 
 ## Configuration
