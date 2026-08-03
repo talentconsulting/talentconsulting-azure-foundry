@@ -1,0 +1,43 @@
+schema_version: 1
+workflow_type: github-actions-agent-chain
+name: openapi-spec-generation
+display_name: "OpenAPI Spec Generation"
+description: "Scans a GitHub directory for API source files and generates one OpenAPI specification for each discovered file."
+version: "2.0.0"
+
+environment:
+  name: dev
+  project_endpoint_env: AZURE_AI_PROJECT_ENDPOINT
+
+inputs:
+  source_directory_url:
+    type: string
+    required: true
+    description: "Full GitHub tree URL containing the repository, ref, and directory to scan."
+
+agents:
+  openapi_file_scan:
+    name: talent-openapi-file-scan
+    model: talent-openapi-file-scan
+    input_map:
+      sourceUrl: source_directory_url
+  openapi_spec_generator:
+    name: openapi-spec-generator
+    input_map:
+      sourceFileUrl: api_file_url
+
+steps:
+  - id: scan_api_files
+    agent: openapi_file_scan
+    output: file-scan-output.json
+  - id: generate_openapi_specs
+    agent: openapi_spec_generator
+    foreach: apiFiles
+    input_map:
+      sourceFileUrl: apiFilePath
+      payloadFiles: payloadFiles
+    output_dir: specs
+
+outputs:
+  directory: outputs/openapi-spec-generation
+  summary: workflow-output.json

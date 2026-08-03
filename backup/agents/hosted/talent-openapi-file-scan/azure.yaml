@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+requiredVersions:
+    extensions:
+        azure.ai.agents: '>=1.0.0-beta.4'
+name: talent-openapi-file-scan
+services:
+    talent-openapi-file-scan:
+        project: src/talent-openapi-file-scan
+        host: azure.ai.agent
+        language: python
+        uses:
+            - ai-project
+        codeConfiguration:
+            dependencyResolution: remote_build
+            entryPoint: main.py
+            runtime: python_3_13
+        container:
+            resources:
+                cpu: "0.5"
+                memory: 1Gi
+        description: Deterministically inventories API source files and the DTO source files defining their request and response payloads.
+        kind: hosted
+        metadata:
+            tags:
+                - Agent Framework
+                - AI Agent Hosting
+                - Azure AI AgentServer
+                - Responses Protocol
+                - Streaming
+        name: talent-openapi-file-scan
+        displayName: talent-openapi-file-scan
+        protocols:
+            - protocol: responses
+              version: 2.0.0
+    ai-project:
+        host: azure.ai.project
+        endpoint: https://talent-day-foundry.services.ai.azure.com/api/projects/talent-day-proj-default
+infra:
+    provider: microsoft.foundry

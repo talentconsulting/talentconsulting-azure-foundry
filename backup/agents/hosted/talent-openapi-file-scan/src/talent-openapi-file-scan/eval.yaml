@@ -1,0 +1,7 @@
+name: smoke-core
+agent:
+    name: talent-openapi-file-scan
+    kind: hosted
+options:
+    eval_model: gpt-4o
+max_samples: 15

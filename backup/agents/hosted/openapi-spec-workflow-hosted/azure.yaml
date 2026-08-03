@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+requiredVersions:
+    extensions:
+        azure.ai.agents: '>=1.0.0-beta.4'
+name: openapi-spec-workflow-hosted
+services:
+    openapi-spec-workflow-hosted:
+        project: src/openapi-spec-workflow-hosted
+        host: azure.ai.agent
+        language: python
+        uses:
+            - ai-project
+        codeConfiguration:
+            dependencyResolution: remote_build
+            entryPoint: main.py
+            runtime: python_3_13
+        container:
+            resources:
+                cpu: "1"
+                memory: 2Gi
+        description: Scans a GitHub directory and generates one validated OpenAPI specification for every discovered API source file.
+        environmentVariables:
+            - name: OPENAPI_FILE_SCAN_AGENT_NAME
+              value: talent-openapi-file-scan
+            - name: OPENAPI_FILE_SCAN_MODEL
+              value: talent-openapi-file-scan
+            - name: OPENAPI_GENERATOR_AGENT_NAME
+              value: openapi-spec-generator
+            - name: OPENAPI_GENERATOR_MODEL
+              value: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
+            - name: OPENAPI_MAX_CONCURRENCY
+              value: "4"
+            - name: OPENAPI_MAX_FILES
+              value: "100"
+        kind: hosted
+        metadata:
+            tags:
+                - Agent Framework
+                - AI Agent Hosting
+                - OpenAPI
+                - Workflow
+        name: openapi-spec-workflow-hosted
+        displayName: OpenAPI Spec Workflow (Hosted)
+        protocols:
+            - protocol: responses
+              version: 2.0.0
+    ai-project:
+        host: azure.ai.project
+        endpoint: https://talent-day-foundry.services.ai.azure.com/api/projects/talent-day-proj-default
+infra:
+    provider: microsoft.foundry

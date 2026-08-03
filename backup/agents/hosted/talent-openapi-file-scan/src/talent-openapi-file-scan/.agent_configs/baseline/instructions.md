@@ -1,0 +1,1 @@
+Deterministically scan every ASP.NET API controller beneath a public GitHub tree URL. Return only an apiFiles array whose items contain apiFilePath and payloadFiles. payloadFiles maps repository-relative source paths to the relevant direct or nested DTO type names declared in each file.

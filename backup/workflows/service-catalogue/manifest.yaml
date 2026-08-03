@@ -1,0 +1,65 @@
+schema_version: 1
+workflow_type: github-actions-agent-chain
+name: service-catalogue
+display_name: "Service Catalogue Workflow"
+description: "Detect changed repositories, generate OpenAPI specifications, and create pull requests in the manifest repository with generated specs."
+version: "2.0.0"
+
+environment:
+  name: dev
+  project_endpoint_env: AZURE_AI_PROJECT_ENDPOINT
+
+inputs:
+  manifest_repository:
+    type: string
+    required: true
+    description: "GitHub repository containing the source-control manifest."
+  manifest_path:
+    type: string
+    required: true
+    default: repoManifest.json
+    description: "Path to the source-control manifest in the manifest repository."
+  scan_path:
+    type: string
+    required: true
+    default: ""
+    description: "Path to scan in each changed repository."
+  source_branch:
+    type: string
+    required: true
+    default: main
+    description: "Branch encoded into the GitHub tree URL supplied to the OpenAPI generator."
+agents:
+  repository_change_detector:
+    name: repository-change-detector
+    input_map:
+      manifestRepository: manifest_repository
+      manifestPath: manifest_path
+  openapi_specs_generator:
+    name: openapi-spec-workflow-hosted
+    model: openapi-spec-workflow-hosted
+    input_map:
+      sourceDirectoryUrl: source_url
+  repository_file_pr_creator:
+    name: repository-file-pr-creator
+    input_map:
+      repository: manifest_repository
+      path: path
+      openApiGeneratorResponse: openApiGeneratorResponse
+      pullRequestTitle: pullRequestTitle
+      pullRequestBody: pullRequestBody
+steps:
+  - id: detect_changed_repositories
+    agent: repository_change_detector
+    output: repositories-to-update.json
+  - id: generate_openapi_specs
+    agent: openapi_specs_generator
+    foreach: repositories
+    output_dir: openapi-specs
+  - id: create_openapi_specs_pull_request
+    agent: repository_file_pr_creator
+    foreach: repositories
+    output_dir: openapi-pull-requests
+outputs:
+  directory: outputs/ai-source-control-workflow
+  summary: workflow-output.json

@@ -5,18 +5,24 @@
 ```text
 .github/
 └── workflows/
-    ├── deploy-openai-spec-reviewer.agent.yml
-    ├── deploy-openai-specs-generator.agent.yml
+    ├── deploy-openapi-spec-reviewer.agent.yml
+    ├── deploy-openapi-spec-generator.agent.yml
+    ├── deploy-openapi-spec-workflow-hosted.agent.yml
+    ├── deploy-talent-openapi-file-scan.agent.yml
     ├── deploy-repository-file-pr-creator.agent.yml
     ├── deploy-repository-change-detector.agent.yml
     └── run-service-catalogue-agent-chain.yml
 
 agents/
 ├── hosted/
-│   └── openapi-spec-generator-hosted/
+│   ├── talent-openapi-file-scan/
+│   │   ├── azure.yaml
+│   │   └── src/
+│   │       └── talent-openapi-file-scan/
+│   └── openapi-spec-workflow-hosted/
 │       ├── azure.yaml
 │       └── src/
-│           └── talent-agent-openAI-generator/
+│           └── openapi-spec-workflow-hosted/
 └── prompt/
     ├── openapi-spec-generator/
     ├── openapi-spec-scanner/
@@ -26,10 +32,13 @@ agents/
 
 scripts/
 ├── deploy-agent.py
+├── run-openapi-spec-generation-workflow.py
 ├── validate-workflow.py
 └── run-ai-source-control-workflow.py
 
 workflows/
+├── openapi-spec-generation/
+│   └── manifest.yaml
 └── service-catalogue/
     └── manifest.yaml
 
@@ -63,17 +72,24 @@ Deploy the single-file prompt OpenAPI generator:
 python scripts/deploy-agent.py --agent-dir agents/prompt/openapi-spec-generator
 ```
 
-Deploy the OpenAPI source scanner:
+Deploy the legacy prompt OpenAPI source scanner only if an older workflow still uses it:
 
 ```bash
 python scripts/deploy-agent.py --agent-dir agents/prompt/openapi-spec-scanner
 ```
 
-Deploy the hosted OpenAPI generator:
+Deploy the hosted API and payload file scan:
 
 ```bash
-cd agents/hosted/openapi-spec-generator-hosted
-azd deploy talent-agent-openAI-generator --no-prompt
+cd agents/hosted/talent-openapi-file-scan
+azd deploy talent-openapi-file-scan --no-prompt
+```
+
+Deploy the hosted orchestration after the file scan and prompt generator:
+
+```bash
+cd agents/hosted/openapi-spec-workflow-hosted
+azd deploy openapi-spec-workflow-hosted --no-prompt
 ```
 
 Or:
@@ -106,7 +122,8 @@ The workflows must live here:
 
 ```text
 .github/workflows/deploy-openapi-spec-reviewer.agent.yml
-.github/workflows/deploy-openai-specs-generator.agent.yml
+.github/workflows/deploy-openapi-spec-generator.agent.yml
+.github/workflows/deploy-talent-openapi-file-scan.agent.yml
 .github/workflows/deploy-repository-change-detector.agent.yml
 .github/workflows/deploy-repository-file-pr-creator.agent.yml
 .github/workflows/run-service-catalogue-agent-chain.yml
@@ -255,7 +272,7 @@ workflows/service-catalogue/manifest.yaml
 The workflow definition declares this sequence:
 
 1. `repository-change-detector`
-2. `talent-agent-openAI-generator` for each repository returned by the first agent
+2. `openapi-spec-workflow-hosted` for each repository returned by the first agent; it invokes `talent-openapi-file-scan` and then `openapi-spec-generator`
 3. `repository-file-pr-creator` for each repository returned by the first agent
 
 ## Notes

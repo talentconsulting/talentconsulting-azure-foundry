@@ -1,0 +1,20 @@
+tools:
+  - type: mcp
+    server_label: GitHub
+    server_url: https://api.githubcopilot.com/mcp
+    require_approval: never
+    project_connection_id: GitHub
+
+tool_usage:
+  github:
+    purpose: "Read the controller and the exact payload source paths supplied by talent-openapi-file-scan at the repository and ref encoded in sourceFileUrl."
+    allowed_operations:
+      - "Read repository file contents"
+    disallowed_operations:
+      - "Search or enumerate repository directories"
+      - "Read unrelated files, sibling controllers, services, repositories, or clients"
+      - "Create, update, or delete files"
+      - "Create or delete branches"
+      - "Create or merge pull requests"
+      - "Modify repository settings"
+      - "Trigger deployments"

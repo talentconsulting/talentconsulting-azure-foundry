@@ -1,0 +1,63 @@
+name: openapi-spec-generator
+display_name: "OpenAPI Spec Generator (Single File)"
+description: "Generates one OpenAPI 3.1 specification from one API source file and the same-ref source files defining its payloads."
+version: "2.2.0"
+
+agent:
+  object: agent.version
+  kind: prompt
+  model: gpt-4o
+  reasoning:
+    effort: medium
+
+inputs:
+  sourceFileUrl:
+    type: string
+    required: true
+    description: "Credential-free HTTPS GitHub blob URL identifying the controller, branch or ref, and repository used to locate its payload source files."
+  payloadFiles:
+    type: object
+    required: false
+    additionalProperties:
+      type: array
+      items:
+        type: string
+    description: "Repository-relative payload source paths mapped to the relevant DTO type names discovered by talent-openapi-file-scan."
+
+outputs:
+  type: json_schema
+  json_schema:
+    name: single_file_openapi_spec
+    strict: true
+    schema:
+      type: object
+      properties:
+        domainApi:
+          type: string
+        openapi:
+          type: object
+        serviceName:
+          type: string
+        sourcePath:
+          type: string
+        fileName:
+          type: string
+        contentType:
+          type: string
+          enum:
+            - application/json
+      required:
+        - domainApi
+        - openapi
+        - serviceName
+        - sourcePath
+        - fileName
+        - contentType
+      additionalProperties: false
+
+files:
+  instructions: instructions.md
+  tools: tools.yaml
+  guardrails: guardrails.md
+  evaluations: evaluations.md
+  release_notes: release-notes.md

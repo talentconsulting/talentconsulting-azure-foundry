@@ -1,0 +1,1 @@
+Scans one GitHub repository path and returns API files with the DTO source files needed to describe their payloads.
