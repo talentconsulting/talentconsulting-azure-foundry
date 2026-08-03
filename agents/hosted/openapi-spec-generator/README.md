@@ -78,3 +78,27 @@ AZURE_DEV_USER_AGENT=microsoft_foundry_skill azd ai agent invoke openapi-spec-ge
 ```bash
 AZURE_DEV_USER_AGENT=microsoft_foundry_skill azd deploy openapi-spec-generator --no-prompt
 ```
+
+## GitHub deployment workflow
+
+The root workflow `.github/workflows/deploy-openapi-spec-generator.agent.yml` runs the unit tests, deploys a new hosted-agent version, verifies its status, and invokes it with an OpenAPI JSON contract test. It runs when this agent changes on the repository's default branch and can also be started manually.
+
+Create a GitHub environment named `dev` and add these environment secrets:
+
+- `AZURE_CLIENT_ID`: client ID of the Entra application or managed identity used by GitHub OIDC
+- `AZURE_TENANT_ID`: Azure tenant ID
+- `AZURE_SUBSCRIPTION_ID`: Azure subscription ID
+- `AZURE_AI_PROJECT_ENDPOINT`: full endpoint of the existing Foundry project
+
+The OIDC identity needs `Contributor` and `Foundry User` access on the target Foundry project. Its federated credential must trust the `dev` GitHub environment.
+
+These optional GitHub environment variables override the workflow defaults:
+
+- `AZURE_AI_MODEL_DEPLOYMENT_NAME` (default `gpt-4o`)
+- `AZURE_LOCATION` (default `uksouth`)
+- `AZURE_RESOURCE_GROUP` (default `talent-day-rg`)
+- `AZURE_AI_ACCOUNT_NAME` (default `talent-day-foundry`)
+- `AZURE_AI_PROJECT_NAME` (default `talent-day-proj-default`)
+- `OPENAPI_SPEC_GENERATOR_TEST_API_FILE`
+- `OPENAPI_SPEC_GENERATOR_TEST_SUPPORTING_FILE_1`
+- `OPENAPI_SPEC_GENERATOR_TEST_SUPPORTING_FILE_2`
