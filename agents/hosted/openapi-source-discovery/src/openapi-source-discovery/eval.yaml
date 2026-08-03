@@ -1,6 +1,6 @@
 name: smoke-core
 agent:
-    name: api-source-discovery
+    name: openapi-source-discovery
     kind: hosted
     config: .agent_configs/baseline/metadata.yaml
 options:

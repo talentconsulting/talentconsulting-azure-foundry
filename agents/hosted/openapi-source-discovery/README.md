@@ -1,4 +1,4 @@
-# API Source Discovery
+# OpenAPI Source Discovery
 
 A deterministic Python hosted agent that inventories ASP.NET API files and the DTO source files used by their request and response payloads.
 
@@ -35,7 +35,7 @@ Results are sorted and deduplicated. A payload file is supporting context only a
 ## Test
 
 ```bash
-python3 -m unittest discover -s src/api-source-discovery -p 'test_*.py'
+python3 -m unittest discover -s src/openapi-source-discovery -p 'test_*.py'
 ```
 
 ## Local run
@@ -47,7 +47,7 @@ AZURE_DEV_USER_AGENT=microsoft_foundry_skill azd ai agent run --no-client
 In a second terminal:
 
 ```bash
-AZURE_DEV_USER_AGENT=microsoft_foundry_skill azd ai agent invoke api-source-discovery --local \
+AZURE_DEV_USER_AGENT=microsoft_foundry_skill azd ai agent invoke openapi-source-discovery --local \
   '{"sourceUrl":"https://github.com/owner/repository/tree/main/src/Application"}'
 ```
 
@@ -56,12 +56,12 @@ AZURE_DEV_USER_AGENT=microsoft_foundry_skill azd ai agent invoke api-source-disc
 After selecting an existing Foundry project or provisioning a new one:
 
 ```bash
-AZURE_DEV_USER_AGENT=microsoft_foundry_skill azd deploy api-source-discovery --no-prompt
+AZURE_DEV_USER_AGENT=microsoft_foundry_skill azd deploy openapi-source-discovery --no-prompt
 ```
 
 ## GitHub deployment workflow
 
-The root workflow `.github/workflows/deploy-api-source-discovery.agent.yml` runs the unit tests, deploys a new hosted-agent version, verifies its status, and invokes it with a contract smoke test. It runs when this agent changes on the repository's default branch and can also be started manually.
+The root workflow `.github/workflows/deploy-openapi-source-discovery.agent.yml` runs the unit tests, deploys a new hosted-agent version, verifies its status, and invokes it with a contract smoke test. It runs when this agent changes on the repository's default branch and can also be started manually.
 
 Create a GitHub environment named `dev` and add these environment secrets:
 
@@ -78,4 +78,4 @@ These optional GitHub environment variables override the workflow defaults:
 - `AZURE_RESOURCE_GROUP` (default `talent-day-rg`)
 - `AZURE_AI_ACCOUNT_NAME` (default `talent-day-foundry`)
 - `AZURE_AI_PROJECT_NAME` (default `talent-day-proj-default`)
-- `API_SOURCE_DISCOVERY_TEST_URL`: public GitHub tree URL used by the post-deployment smoke test
+- `OPENAPI_SOURCE_DISCOVERY_TEST_URL`: public GitHub tree URL used by the post-deployment smoke test

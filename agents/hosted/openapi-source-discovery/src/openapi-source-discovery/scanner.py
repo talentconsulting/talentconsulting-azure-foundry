@@ -104,7 +104,7 @@ def _download_sources(location: SourceLocation) -> dict[str, str]:
     ref = urllib.parse.quote(location.ref, safe="")
     request = urllib.request.Request(
         f"https://codeload.github.com/{owner}/{repository}/zip/{ref}",
-        headers={"User-Agent": "api-source-discovery"},
+        headers={"User-Agent": "openapi-source-discovery"},
     )
     try:
         with urllib.request.urlopen(request, timeout=120) as response:

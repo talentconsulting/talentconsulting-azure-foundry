@@ -1,4 +1,4 @@
-"""Responses-protocol host for the API Source Discovery scanner."""
+"""Responses-protocol host for the OpenAPI Source Discovery scanner."""
 
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ async def handle_create(
         source_url = extract_source_url(await context.get_input_text() or "")
         result = await asyncio.to_thread(scan, source_url)
     except Exception:
-        logger.exception("API Source Discovery scan failed.")
+        logger.exception("OpenAPI Source Discovery scan failed.")
         result = []
 
     yield text.emit_delta(json.dumps(result, separators=(",", ":")))

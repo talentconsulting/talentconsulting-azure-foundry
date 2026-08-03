@@ -1,0 +1,1 @@
+Generates one OpenAPI 3.1 JSON document from one API source file and its supporting DTO source files.

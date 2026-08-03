@@ -1,10 +1,10 @@
-name: Deploy API Source Discovery
+name: Deploy OpenAPI Source Discovery
 
 on:
   push:
     paths:
-      - "agents/hosted/api-source-discovery/**"
-      - ".github/workflows/deploy-api-source-discovery.agent.yml"
+      - "agents/hosted/openapi-source-discovery/**"
+      - ".github/workflows/deploy-openapi-source-discovery.agent.yml"
   workflow_dispatch:
 
 permissions:
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: api-source-discovery-${{ github.ref }}
+  group: openapi-source-discovery-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -22,7 +22,7 @@ jobs:
     environment: dev
 
     env:
-      AGENT_PROJECT_DIR: agents/hosted/api-source-discovery
+      AGENT_PROJECT_DIR: agents/hosted/openapi-source-discovery
       AZD_ENV_NAME: ci
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -32,7 +32,7 @@ jobs:
       AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'talent-day-rg' }}
       AZURE_AI_ACCOUNT_NAME: ${{ vars.AZURE_AI_ACCOUNT_NAME || 'talent-day-foundry' }}
       AZURE_AI_PROJECT_NAME: ${{ vars.AZURE_AI_PROJECT_NAME || 'talent-day-proj-default' }}
-      AGENT_TEST_SOURCE_URL: ${{ vars.API_SOURCE_DISCOVERY_TEST_URL || 'https://github.com/talentconsulting/talentsuite-bidmanager/tree/main/src/TalentSuite.Server/Health' }}
+      AGENT_TEST_SOURCE_URL: ${{ vars.OPENAPI_SOURCE_DISCOVERY_TEST_URL || 'https://github.com/talentconsulting/talentsuite-bidmanager/tree/main/src/TalentSuite.Server/Health' }}
 
     steps:
       - name: Checkout repository
@@ -100,15 +100,15 @@ jobs:
 
       - name: Run unit tests
         working-directory: ${{ env.AGENT_PROJECT_DIR }}
-        run: python3 -m unittest discover -s src/api-source-discovery -p 'test_*.py'
+        run: python3 -m unittest discover -s src/openapi-source-discovery -p 'test_*.py'
 
-      - name: Deploy API Source Discovery
+      - name: Deploy OpenAPI Source Discovery
         working-directory: ${{ env.AGENT_PROJECT_DIR }}
-        run: azd deploy api-source-discovery --no-prompt
+        run: azd deploy openapi-source-discovery --no-prompt
 
       - name: Verify deployed agent
         working-directory: ${{ env.AGENT_PROJECT_DIR }}
-        run: azd ai agent show api-source-discovery --output json --no-prompt
+        run: azd ai agent show openapi-source-discovery --output json --no-prompt
 
       - name: Smoke test deployed contract
         working-directory: ${{ env.AGENT_PROJECT_DIR }}
@@ -116,17 +116,17 @@ jobs:
         run: |
           set -euo pipefail
           payload="{\"sourceUrl\":\"$AGENT_TEST_SOURCE_URL\"}"
-          azd ai agent invoke api-source-discovery "$payload" > "$RUNNER_TEMP/api-source-discovery-response.txt" 2>&1
-          cat "$RUNNER_TEMP/api-source-discovery-response.txt"
+          azd ai agent invoke openapi-source-discovery "$payload" > "$RUNNER_TEMP/openapi-source-discovery-response.txt" 2>&1
+          cat "$RUNNER_TEMP/openapi-source-discovery-response.txt"
 
-          if ! grep -q '"apiFile"' "$RUNNER_TEMP/api-source-discovery-response.txt"; then
+          if ! grep -q '"apiFile"' "$RUNNER_TEMP/openapi-source-discovery-response.txt"; then
             echo "::error::The deployed agent response did not contain apiFile."
             exit 1
           fi
 
-          if ! grep -q '"supportingFiles"' "$RUNNER_TEMP/api-source-discovery-response.txt"; then
+          if ! grep -q '"supportingFiles"' "$RUNNER_TEMP/openapi-source-discovery-response.txt"; then
             echo "::error::The deployed agent response did not contain supportingFiles."
             exit 1
           fi
 
-          echo "API Source Discovery smoke test passed."
+          echo "OpenAPI Source Discovery smoke test passed."

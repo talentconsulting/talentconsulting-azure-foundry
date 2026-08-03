@@ -4,11 +4,11 @@ requiredVersions:
   extensions:
     azure.ai.agents: '>=1.0.0-beta.4'
 
-name: api-source-discovery
+name: openapi-spec-generator
 
 services:
-  api-source-discovery:
-    project: src/api-source-discovery
+  openapi-spec-generator:
+    project: src/openapi-spec-generator
     host: azure.ai.agent
     language: python
     uses:
@@ -21,10 +21,13 @@ services:
       resources:
         cpu: "0.5"
         memory: 1Gi
-    description: Scans one GitHub repository path and returns API files with the DTO source files needed to describe their payloads.
+    description: Generates one OpenAPI 3.1 JSON document from one API source file and its supporting DTO source files.
+    environmentVariables:
+      - name: AZURE_AI_MODEL_DEPLOYMENT_NAME
+        value: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
     kind: hosted
-    name: api-source-discovery
-    displayName: API Source Discovery
+    name: openapi-spec-generator
+    displayName: OpenAPI Spec Generator
     protocols:
       - protocol: responses
         version: 2.0.0
