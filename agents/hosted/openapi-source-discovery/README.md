@@ -30,7 +30,7 @@ The response is a root JSON array. `apiFile` and every `supportingFiles` entry a
 ]
 ```
 
-Results are sorted and deduplicated. A payload file is supporting context only and never becomes its own API entry. Invalid or inaccessible input returns `[]`.
+Results are deterministic and deduplicated. A payload file is supporting context only and never becomes its own API entry. Type declarations and source references are indexed once per repository and reused across every discovered API. Discovery considers action signatures, response metadata, and concrete types constructed in action return expressions. Supporting DTO traversal is breadth-first, ignores comments, literals, and test-project sources, and is capped at the specification generator's 50-file input limit. Invalid or inaccessible input returns `[]`.
 
 ## Test
 

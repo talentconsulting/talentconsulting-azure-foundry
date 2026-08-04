@@ -8,6 +8,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
+from collections import deque
 from dataclasses import dataclass
 
 
@@ -25,8 +26,15 @@ class SourceLocation:
 
 IGNORED_PARTS = {
     ".git", ".github", ".vs", ".vscode", "bin", "build", "dist",
-    "node_modules", "obj", "packages", "test", "tests",
+    "node_modules", "obj", "packages", "test", "tests", "unittests",
+    "integrationtests", "acceptancetests", "testharness", "fakeservers",
+    "testsubscriber", "testhelpers",
 }
+IGNORED_SUFFIXES = (
+    ".tests", ".unittests", ".integrationtests", ".acceptancetests",
+    ".testharness", ".fakeservers", ".testsubscriber", ".testhelpers",
+)
+MAX_SUPPORTING_FILES = 50
 HTTP_ATTRIBUTE_RE = re.compile(
     r"\bHttp(?:Get|Post|Put|Patch|Delete|Head|Options)\b", re.IGNORECASE
 )
@@ -43,6 +51,14 @@ ACTION_SIGNATURE_RE = re.compile(
 TYPE_DECLARATION_RE = re.compile(
     r"\b(?:class|struct|enum|interface|record(?:\s+(?:class|struct))?)\s+"
     r"(?P<name>[A-Za-z_]\w*)\b"
+)
+IDENTIFIER_RE = re.compile(r"\b[A-Za-z_]\w*\b")
+RETURN_EXPRESSION_RE = re.compile(r"\breturn\b(?P<expression>.*?);", re.DOTALL)
+CONSTRUCTED_TYPE_RE = re.compile(r"\bnew\s+(?P<name>[A-Z][A-Za-z0-9_]*)\b")
+COMMENT_OR_LITERAL_RE = re.compile(
+    r"//[^\r\n]*|/\*.*?\*/|@\"(?:\"\"|[^\"])*\"|"
+    r'\"(?:\\.|[^\"\\])*\"|\'(?:\\.|[^\'\\])*\'',
+    re.DOTALL,
 )
 
 
@@ -75,7 +91,10 @@ def parse_source_url(source_url: str) -> SourceLocation:
 
 
 def _is_ignored(path: str) -> bool:
-    return bool({part.lower() for part in path.split("/")} & IGNORED_PARTS)
+    parts = {part.lower() for part in path.split("/")}
+    return bool(parts & IGNORED_PARTS) or any(
+        part.endswith(IGNORED_SUFFIXES) for part in parts
+    )
 
 
 def _is_under_base(path: str, base_path: str) -> bool:
@@ -96,6 +115,10 @@ def _is_api_file(path: str, content: str) -> bool:
     return (
         controller_candidate and bool(HTTP_ATTRIBUTE_RE.search(content))
     ) or bool(MAPPED_ROUTE_RE.search(content))
+
+
+def _code_only(content: str) -> str:
+    return COMMENT_OR_LITERAL_RE.sub(lambda match: " " * len(match.group()), content)
 
 
 def _download_sources(location: SourceLocation) -> dict[str, str]:
@@ -139,7 +162,8 @@ def _download_sources(location: SourceLocation) -> dict[str, str]:
 
 def _action_type_names(content: str) -> set[str]:
     names: set[str] = set()
-    for match in ACTION_SIGNATURE_RE.finditer(content):
+    code = _code_only(content)
+    for match in ACTION_SIGNATURE_RE.finditer(code):
         if not HTTP_ATTRIBUTE_RE.search(match.group("attributes")):
             continue
         signature = " ".join(
@@ -150,6 +174,11 @@ def _action_type_names(content: str) -> set[str]:
             )
         )
         names.update(re.findall(r"\b[A-Za-z_]\w*\b", signature))
+        for expression in _returned_expressions(code, match.end()):
+            names.update(
+                constructed.group("name")
+                for constructed in CONSTRUCTED_TYPE_RE.finditer(expression)
+            )
 
     # Minimal API declarations often keep handler types on the same statement.
     for line in content.splitlines():
@@ -158,34 +187,80 @@ def _action_type_names(content: str) -> set[str]:
     return names
 
 
-def _supporting_paths(api_path: str, content: str, sources: dict[str, str]) -> list[str]:
-    declarations: dict[str, list[str]] = {}
-    for path, source in sources.items():
-        if path == api_path:
-            continue
-        for match in TYPE_DECLARATION_RE.finditer(source):
-            declarations.setdefault(match.group("name"), []).append(path)
+def _returned_expressions(code: str, signature_end: int) -> list[str]:
+    position = signature_end
+    while position < len(code) and code[position].isspace():
+        position += 1
 
-    pending = list(_action_type_names(content))
+    if code.startswith("=>", position):
+        expression_end = code.find(";", position + 2)
+        if expression_end >= 0:
+            return [code[position + 2 : expression_end]]
+        return []
+
+    if position >= len(code) or code[position] != "{":
+        return []
+
+    depth = 0
+    for index in range(position, len(code)):
+        if code[index] == "{":
+            depth += 1
+        elif code[index] == "}":
+            depth -= 1
+            if depth == 0:
+                body = code[position + 1 : index]
+                return [
+                    match.group("expression")
+                    for match in RETURN_EXPRESSION_RE.finditer(body)
+                ]
+    return []
+
+
+def _build_type_index(
+    sources: dict[str, str],
+) -> tuple[dict[str, list[str]], dict[str, set[str]]]:
+    declarations: dict[str, list[str]] = {}
+    declarations_by_path: dict[str, set[str]] = {}
+    for path, source in sources.items():
+        for match in TYPE_DECLARATION_RE.finditer(source):
+            name = match.group("name")
+            declarations.setdefault(name, []).append(path)
+            declarations_by_path.setdefault(path, set()).add(name)
+
+    references = {}
+    for path, source in sources.items():
+        code = _code_only(source)
+        references[path] = (
+            set(IDENTIFIER_RE.findall(code)).intersection(declarations)
+            - declarations_by_path.get(path, set())
+        )
+    return declarations, references
+
+
+def _supporting_paths(
+    api_path: str,
+    content: str,
+    declarations: dict[str, list[str]],
+    references: dict[str, set[str]],
+) -> list[str]:
+    pending = deque(sorted(_action_type_names(content)))
     visited_types: set[str] = set()
     visited_paths: set[str] = set()
-    while pending:
-        type_name = pending.pop()
+    supporting_paths: list[str] = []
+    while pending and len(supporting_paths) < MAX_SUPPORTING_FILES:
+        type_name = pending.popleft()
         if type_name in visited_types:
             continue
         visited_types.add(type_name)
-        for path in declarations.get(type_name, []):
-            if path in visited_paths:
+        for path in sorted(declarations.get(type_name, [])):
+            if path == api_path or path in visited_paths:
                 continue
             visited_paths.add(path)
-            source = sources[path]
-            pending.extend(
-                name
-                for name in declarations
-                if name not in visited_types
-                and re.search(rf"\b{re.escape(name)}\b", source)
-            )
-    return sorted(visited_paths)
+            supporting_paths.append(path)
+            pending.extend(sorted(references[path] - visited_types))
+            if len(supporting_paths) == MAX_SUPPORTING_FILES:
+                break
+    return supporting_paths
 
 
 def _blob_url(location: SourceLocation, path: str) -> str:
@@ -200,17 +275,24 @@ def _blob_url(location: SourceLocation, path: str) -> str:
 def scan(source_url: str, sources: dict[str, str] | None = None) -> list[dict[str, object]]:
     location = parse_source_url(source_url)
     repository_sources = sources if sources is not None else _download_sources(location)
+    api_sources = [
+        (path, content)
+        for path, content in sorted(repository_sources.items())
+        if _is_under_base(path, location.base_path) and _is_api_file(path, content)
+    ]
+    if not api_sources:
+        return []
+
+    declarations, references = _build_type_index(repository_sources)
     results: list[dict[str, object]] = []
-    for path, content in sorted(repository_sources.items()):
-        if not _is_under_base(path, location.base_path) or not _is_api_file(path, content):
-            continue
+    for path, content in api_sources:
         results.append(
             {
                 "apiFile": _blob_url(location, path),
                 "supportingFiles": [
                     _blob_url(location, supporting_path)
                     for supporting_path in _supporting_paths(
-                        path, content, repository_sources
+                        path, content, declarations, references
                     )
                 ],
             }
