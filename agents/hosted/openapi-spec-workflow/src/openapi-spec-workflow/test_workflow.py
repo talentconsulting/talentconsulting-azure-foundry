@@ -53,7 +53,33 @@ class WorkflowTests(unittest.TestCase):
         publisher_calls = [call for call in calls if call[0] == "publisher"]
         self.assertEqual(2, len(generator_calls))
         self.assertEqual(1, len(publisher_calls))
+        self.assertEqual("app/open-api", publisher_calls[0][1]["targetDirectory"])
         self.assertEqual([API_1, API_2], [item["apiFile"] for item in publisher_calls[0][1]["specifications"]])
+
+    def test_explicit_target_directory_overrides_repository_layout(self):
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "discovery":
+                return [{"apiFile": API_1, "supportingFiles": []}]
+            if name == "generator":
+                return dict(SPEC)
+            self.assertEqual("custom/specs", payload["targetDirectory"])
+            return {"success": True, "status": "created"}
+
+        result = run_workflow(
+            object(),
+            {
+                "sourceUrl": SOURCE,
+                "targetRepository": "target/specs",
+                "targetDirectory": "custom/specs",
+            },
+            "discovery",
+            "generator",
+            "publisher",
+            "gpt-4o",
+            invoker=invoke,
+        )
+
+        self.assertTrue(result["success"])
 
     def test_partial_generation_publishes_successes_and_reports_failure(self):
         def invoke(project, name, model, payload, max_attempts=2):
@@ -97,6 +123,32 @@ class WorkflowTests(unittest.TestCase):
             invoker=invoke,
         )
         self.assertEqual("no_api_files", result["errors"][0]["code"])
+
+    def test_can_defer_publication_and_return_generated_specifications(self):
+        calls = []
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            calls.append(name)
+            if name == "discovery":
+                return [{"apiFile": API_1, "supportingFiles": []}]
+            if name == "generator":
+                return dict(SPEC)
+            raise AssertionError("Publisher must not be called in deferred mode.")
+
+        result = run_workflow(
+            object(),
+            {"sourceUrl": SOURCE, "deferPublication": True},
+            "discovery",
+            "generator",
+            "publisher",
+            "gpt-4o",
+            invoker=invoke,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(["discovery", "generator"], calls)
+        self.assertEqual(API_1, result["specifications"][0]["apiFile"])
+        self.assertIsNone(result["pullRequest"])
 
 
 if __name__ == "__main__":

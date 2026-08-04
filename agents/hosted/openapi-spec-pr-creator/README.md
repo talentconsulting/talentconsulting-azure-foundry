@@ -30,8 +30,10 @@ A Python hosted agent that accepts generated OpenAPI specifications, writes them
 - `baseBranch` defaults to the destination repository's default branch.
 - `branchName` defaults to a unique `openapi-specs/...` branch.
 - `pullRequestTitle` and `pullRequestBody` have generated defaults.
+- Each specification may provide `targetPath` to override its deterministic default path.
+- `manifestFile` can provide one JSON `path` and JSON-serializable `content`; it is committed atomically with the specifications.
 
-For each source API, the agent preserves its source path beneath `targetDirectory` and changes the extension to `.openapi.json`.
+For each source API, the agent writes the API filename directly beneath `targetDirectory` and changes the extension to `.openapi.json`. Source directories are not reproduced. Duplicate API filenames are rejected to prevent accidental overwrites.
 
 ## Output
 
@@ -46,7 +48,7 @@ The agent always returns JSON. A successful change includes the created pull req
   "commitSha": "0123456789abcdef0123456789abcdef01234567",
   "pullRequestUrl": "https://github.com/owner/api-specifications/pull/12",
   "pullRequestNumber": 12,
-  "filesWritten": [{"path": "openapi/src/Api/BidsController.openapi.json", "action": "created"}],
+  "filesWritten": [{"path": "openapi/BidsController.openapi.json", "action": "created"}],
   "errors": []
 }
 ```

@@ -6,6 +6,7 @@ The pipeline uses an existing Azure AI Foundry project and four hosted agents. D
 2. `openapi-spec-generator`
 3. `openapi-spec-pr-creator`
 4. `openapi-spec-workflow`
+5. `openapi-manifest-orchestrator` (optional manifest entry point)
 
 ## GitHub Actions configuration
 
@@ -46,6 +47,7 @@ The following workflows run on changes to their agent on the default branch and 
 - `.github/workflows/deploy-openapi-spec-generator.agent.yml`
 - `.github/workflows/deploy-openapi-spec-pr-creator.agent.yml`
 - `.github/workflows/deploy-openapi-spec-workflow.agent.yml`
+- `.github/workflows/deploy-openapi-manifest-orchestrator.agent.yml`
 
 The PR creator and workflow smoke tests use invalid input deliberately. This verifies the hosted Responses endpoint without writing to a repository during deployment.
 
@@ -66,3 +68,5 @@ azd deploy openapi-spec-workflow --no-prompt
 ```
 
 No destination repository is fixed at deployment time. Supply it as `targetRepository` whenever the workflow is invoked.
+
+`openapi-manifest-orchestrator` instead derives its destination from the repository containing its manifest. No routine or schedule is deployed initially; invoke the hosted agent directly while testing.

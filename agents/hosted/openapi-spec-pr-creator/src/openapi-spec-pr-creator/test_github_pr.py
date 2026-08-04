@@ -79,7 +79,7 @@ class GitHubPrTests(unittest.TestCase):
         self.assertEqual("created", result["status"])
         self.assertEqual(7, result["pullRequestNumber"])
         self.assertEqual(
-            "openapi/src/Api/BidsController.openapi.json", result["filesWritten"][0]["path"]
+            "openapi/BidsController.openapi.json", result["filesWritten"][0]["path"]
         )
         self.assertEqual("created", result["filesWritten"][0]["action"])
         ref_call = next(call for call in client.calls if call[1].endswith("/git/refs"))
@@ -92,6 +92,24 @@ class GitHubPrTests(unittest.TestCase):
         self.assertEqual("unchanged", result["status"])
         self.assertFalse(any(call[1].endswith("/git/refs") for call in client.calls))
         self.assertFalse(any(call[1].endswith("/pulls") for call in client.calls))
+
+    def test_writes_explicit_target_path_and_manifest_in_same_commit(self):
+        payload = request_payload()
+        payload["specifications"][0]["targetPath"] = "openapi/source/app/Bids.openapi.json"
+        payload["manifestFile"] = {
+            "path": "repoManifest.json",
+            "content": [{"github-repo": "https://github.com/source/app"}],
+        }
+        client = FakeClient()
+
+        result = publish(payload, client, branch_factory=lambda: "openapi-specs/manifest")
+
+        self.assertEqual(
+            ["openapi/source/app/Bids.openapi.json", "repoManifest.json"],
+            [item["path"] for item in result["filesWritten"]],
+        )
+        tree_call = next(call for call in client.calls if call[1].endswith("/git/trees"))
+        self.assertEqual(2, len(tree_call[2]["tree"]))
 
 
 if __name__ == "__main__":

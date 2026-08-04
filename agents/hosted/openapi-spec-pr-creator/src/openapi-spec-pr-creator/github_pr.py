@@ -139,7 +139,8 @@ def _source_path(api_file: object) -> str:
 
 def _output_path(target_directory: str, api_file: object) -> str:
     source_path = _source_path(api_file)
-    root, _ = posixpath.splitext(source_path)
+    filename = posixpath.basename(source_path)
+    root, _ = posixpath.splitext(filename)
     return posixpath.join(target_directory, f"{root}.openapi.json")
 
 
@@ -156,6 +157,18 @@ def _validate_branch(value: str, field: str) -> str:
 
 
 def validate_request(payload: dict[str, Any]) -> dict[str, Any]:
+    allowed = {
+        "repository",
+        "specifications",
+        "targetDirectory",
+        "baseBranch",
+        "branchName",
+        "pullRequestTitle",
+        "pullRequestBody",
+        "manifestFile",
+    }
+    if not set(payload).issubset(allowed):
+        raise PublicationError("invalid_input", "Input contains unsupported properties.")
     repository = normalize_repository(payload.get("repository"))
     specifications = payload.get("specifications")
     if not isinstance(specifications, list) or not specifications:
@@ -167,10 +180,13 @@ def validate_request(payload: dict[str, Any]) -> dict[str, Any]:
     seen_paths: set[str] = set()
     total_bytes = 0
     for item in specifications:
-        if not isinstance(item, dict) or set(item) != {"apiFile", "specification"}:
+        if not isinstance(item, dict) or set(item) not in (
+            {"apiFile", "specification"},
+            {"apiFile", "specification", "targetPath"},
+        ):
             raise PublicationError(
                 "invalid_specification",
-                "Each specifications element must contain exactly apiFile and specification.",
+                "Each specifications element must contain apiFile and specification, with optional targetPath.",
             )
         specification = item["specification"]
         if not isinstance(specification, dict) or specification.get("openapi") != "3.1.0":
@@ -180,13 +196,39 @@ def validate_request(payload: dict[str, Any]) -> dict[str, Any]:
                 "invalid_specification",
                 "Each specification must contain info, paths, and components objects.",
             )
-        output_path = _output_path(target_directory, item["apiFile"])
+        output_path = (
+            _clean_relative_path(item["targetPath"], "targetPath")
+            if "targetPath" in item
+            else _output_path(target_directory, item["apiFile"])
+        )
+        if not output_path.endswith(".json"):
+            raise PublicationError("invalid_specification", "targetPath must end with .json.")
         if output_path in seen_paths:
             raise PublicationError("duplicate_output_path", f"Multiple specifications map to {output_path}.")
         seen_paths.add(output_path)
         content = (json.dumps(specification, indent=2) + "\n").encode("utf-8")
         total_bytes += len(content)
         validated.append({"apiFile": item["apiFile"], "path": output_path, "content": content})
+
+    manifest_file = payload.get("manifestFile")
+    validated_manifest = None
+    if manifest_file is not None:
+        if not isinstance(manifest_file, dict) or set(manifest_file) != {"path", "content"}:
+            raise PublicationError(
+                "invalid_manifest_file",
+                "manifestFile must contain exactly path and content.",
+            )
+        manifest_path = _clean_relative_path(manifest_file["path"], "manifestFile.path")
+        if not manifest_path.endswith(".json"):
+            raise PublicationError("invalid_manifest_file", "manifestFile.path must end with .json.")
+        if manifest_path in seen_paths:
+            raise PublicationError("duplicate_output_path", f"manifestFile collides with {manifest_path}.")
+        try:
+            manifest_content = (json.dumps(manifest_file["content"], indent=2) + "\n").encode("utf-8")
+        except (TypeError, ValueError) as error:
+            raise PublicationError("invalid_manifest_file", "manifestFile.content must be JSON serializable.") from error
+        total_bytes += len(manifest_content)
+        validated_manifest = {"path": manifest_path, "content": manifest_content}
     if total_bytes > MAX_TOTAL_BYTES:
         raise PublicationError("specifications_too_large", "Generated specification files exceed 10 MiB.")
 
@@ -194,6 +236,7 @@ def validate_request(payload: dict[str, Any]) -> dict[str, Any]:
         "repository": repository,
         "specifications": validated,
         "targetDirectory": target_directory,
+        "manifestFile": validated_manifest,
     }
     for field in ("baseBranch", "branchName", "pullRequestTitle", "pullRequestBody"):
         value = payload.get(field)
@@ -251,6 +294,11 @@ def publish(
         existing = _existing_content(github, repository, item["path"], base_branch)
         action = "created" if existing is None else ("unchanged" if existing == item["content"] else "updated")
         planned.append(PlannedFile(item["path"], item["content"], action))
+    manifest_file = request.get("manifestFile")
+    if manifest_file is not None:
+        existing = _existing_content(github, repository, manifest_file["path"], base_branch)
+        action = "created" if existing is None else ("unchanged" if existing == manifest_file["content"] else "updated")
+        planned.append(PlannedFile(manifest_file["path"], manifest_file["content"], action))
 
     files_written = [{"path": item.path, "action": item.action} for item in planned]
     changed = [item for item in planned if item.action != "unchanged"]

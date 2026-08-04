@@ -73,14 +73,20 @@ def parse_workflow_request(input_text: str) -> dict[str, Any]:
         "branchName",
         "pullRequestTitle",
         "pullRequestBody",
+        "deferPublication",
     }
     if not set(payload).issubset(allowed):
         raise WorkflowError("invalid_input", "Input contains unsupported properties.")
     parse_source_url(payload.get("sourceUrl"))
+    defer_publication = payload.get("deferPublication", False)
+    if not isinstance(defer_publication, bool):
+        raise WorkflowError("invalid_input", "deferPublication must be a boolean.")
     target = payload.get("targetRepository")
-    if not isinstance(target, str) or not target.strip():
+    if not defer_publication and (not isinstance(target, str) or not target.strip()):
         raise WorkflowError("invalid_input", "targetRepository is required.")
-    for field in allowed - {"sourceUrl", "targetRepository"}:
+    if target is not None and (not isinstance(target, str) or not target.strip()):
+        raise WorkflowError("invalid_input", "targetRepository must be a non-empty string.")
+    for field in allowed - {"sourceUrl", "targetRepository", "deferPublication"}:
         value = payload.get(field)
         if value is not None and (not isinstance(value, str) or not value.strip()):
             raise WorkflowError("invalid_input", f"{field} must be a non-empty string.")
@@ -171,9 +177,11 @@ def invoke_agent(
 
 
 def _publisher_payload(request: dict[str, Any], specifications: list[dict[str, Any]]) -> dict[str, Any]:
+    _, source_repository, _ = parse_source_url(request["sourceUrl"])
     payload: dict[str, Any] = {
         "repository": request["targetRepository"],
         "specifications": specifications,
+        "targetDirectory": f"{source_repository}/open-api",
     }
     mappings = {
         "targetDirectory": "targetDirectory",
@@ -253,6 +261,18 @@ def run_workflow(
             "generationErrors": generation_errors,
             "pullRequest": None,
             "errors": [{"code": "generation_failed", "message": "No specifications were generated."}],
+        }
+
+    if request.get("deferPublication", False):
+        return {
+            "success": not generation_errors,
+            "sourceUrl": request["sourceUrl"],
+            "discoveredCount": len(api_files),
+            "generatedCount": len(specifications),
+            "generationErrors": generation_errors,
+            "specifications": specifications,
+            "pullRequest": None,
+            "errors": [],
         }
 
     publication = invoker(

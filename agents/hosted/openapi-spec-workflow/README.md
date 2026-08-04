@@ -8,13 +8,15 @@ A hosted orchestration agent that calls `openapi-source-discovery`, invokes `ope
 {
   "sourceUrl": "https://github.com/owner/application/tree/main/src/Api",
   "targetRepository": "owner/api-specifications",
-  "targetDirectory": "openapi",
+  "targetDirectory": "application/open-api",
   "targetBaseBranch": "main",
   "pullRequestTitle": "Update generated OpenAPI specifications"
 }
 ```
 
-`sourceUrl` and `targetRepository` are required. `targetDirectory`, `targetBaseBranch`, `branchName`, `pullRequestTitle`, and `pullRequestBody` are optional and are forwarded to the PR creator.
+`sourceUrl` and `targetRepository` are required. By default, specifications are written directly beneath `<source-repository>/open-api` in the target repository; source directories are not reproduced. `targetDirectory` can override that directory; it and `targetBaseBranch`, `branchName`, `pullRequestTitle`, and `pullRequestBody` are forwarded to the PR creator.
+
+Internal orchestrators can set `deferPublication: true`. In that mode only `sourceUrl` is required, the workflow returns its generated `specifications` array, and it does not call the PR creator. This allows a parent workflow to combine multiple repositories into one atomic pull request.
 
 ## Output
 
