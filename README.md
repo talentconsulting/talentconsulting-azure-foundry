@@ -10,6 +10,44 @@ This repository contains Azure AI Foundry hosted agents that discover API source
 4. [`openapi-spec-workflow`](agents/hosted/openapi-spec-workflow/README.md) runs the complete sequence, invoking the generator once per discovered API and sending the combined result to the PR creator.
 5. [`openapi-manifest-orchestrator`](agents/hosted/openapi-manifest-orchestrator/README.md) checks manifest commit hashes and creates one combined specs-and-manifest pull request for changed repositories.
 
+### Agent interactions and dependencies
+
+```mermaid
+flowchart TD
+    caller[Caller]
+    source[(Source GitHub repositories)]
+    target[(Target GitHub repository)]
+
+    subgraph foundry[Microsoft Foundry hosted agents]
+        manifest[openapi-manifest-orchestrator]
+        workflow[openapi-spec-workflow]
+        discovery[openapi-source-discovery]
+        generator[openapi-spec-generator]
+        publisher[openapi-spec-pr-creator]
+    end
+
+    caller -->|Manifest URL| manifest
+    caller -->|Source URL and target repository| workflow
+
+    manifest -->|Read manifest and branch heads| source
+    manifest -->|One deferred call per changed repository| workflow
+
+    workflow -->|Discover API and DTO files| discovery
+    discovery -->|Download repository archive| source
+    workflow -->|One call per discovered API| generator
+    generator -->|Read API and supporting files| source
+
+    workflow -->|Direct run: publish generated specs| publisher
+    manifest -->|Manifest run: publish combined specs and manifest| publisher
+    publisher -->|Create branch, commit files, and open PR| target
+```
+
+The dependency order is:
+
+- `openapi-source-discovery`, `openapi-spec-generator`, and `openapi-spec-pr-creator` are leaf agents and can be deployed independently.
+- `openapi-spec-workflow` depends on all three leaf agents.
+- `openapi-manifest-orchestrator` depends on `openapi-spec-workflow` and `openapi-spec-pr-creator`.
+
 Previous workflows, scripts, prompt agents, and documentation are retained under [`backup/`](backup/).
 
 ## Run the complete workflow
@@ -45,6 +83,9 @@ azd deploy openapi-spec-pr-creator --no-prompt
 
 cd ../openapi-spec-workflow
 azd deploy openapi-spec-workflow --no-prompt
+
+cd ../openapi-manifest-orchestrator
+azd deploy openapi-manifest-orchestrator --no-prompt
 ```
 
 Each project also has a deployment workflow under `.github/workflows/`. See [DEPLOYMENT.md](DEPLOYMENT.md) for Azure/GitHub configuration and permissions.
