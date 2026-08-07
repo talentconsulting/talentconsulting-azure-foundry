@@ -3,7 +3,7 @@ name: Deploy OpenAPI Spec Workflow
 on:
   push:
     paths:
-      - "agents/hosted/openapi-spec-workflow/**"
+      - "agents/hosted/openapi/openapi-spec-workflow/**"
       - ".github/workflows/deploy-openapi-spec-workflow.agent.yml"
   workflow_dispatch:
 
@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: dev
     env:
-      AGENT_PROJECT_DIR: agents/hosted/openapi-spec-workflow
+      AGENT_PROJECT_DIR: agents/hosted/openapi/openapi-spec-workflow
       AZD_ENV_NAME: ci
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}

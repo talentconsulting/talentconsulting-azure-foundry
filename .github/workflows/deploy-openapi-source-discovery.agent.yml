@@ -3,7 +3,7 @@ name: Deploy OpenAPI Source Discovery
 on:
   push:
     paths:
-      - "agents/hosted/openapi-source-discovery/**"
+      - "agents/hosted/openapi/openapi-source-discovery/**"
       - ".github/workflows/deploy-openapi-source-discovery.agent.yml"
   workflow_dispatch:
 
@@ -22,7 +22,7 @@ jobs:
     environment: dev
 
     env:
-      AGENT_PROJECT_DIR: agents/hosted/openapi-source-discovery
+      AGENT_PROJECT_DIR: agents/hosted/openapi/openapi-source-discovery
       AZD_ENV_NAME: ci
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}

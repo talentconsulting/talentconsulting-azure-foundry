@@ -3,7 +3,7 @@ name: Deploy OpenAPI Spec Generator
 on:
   push:
     paths:
-      - "agents/hosted/openapi-spec-generator/**"
+      - "agents/hosted/openapi/openapi-spec-generator/**"
       - ".github/workflows/deploy-openapi-spec-generator.agent.yml"
   workflow_dispatch:
 
@@ -22,7 +22,7 @@ jobs:
     environment: dev
 
     env:
-      AGENT_PROJECT_DIR: agents/hosted/openapi-spec-generator
+      AGENT_PROJECT_DIR: agents/hosted/openapi/openapi-spec-generator
       AZD_ENV_NAME: ci
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}

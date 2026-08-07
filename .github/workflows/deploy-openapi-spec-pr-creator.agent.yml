@@ -3,7 +3,7 @@ name: Deploy OpenAPI Spec PR Creator
 on:
   push:
     paths:
-      - "agents/hosted/openapi-spec-pr-creator/**"
+      - "agents/hosted/openapi/openapi-spec-pr-creator/**"
       - ".github/workflows/deploy-openapi-spec-pr-creator.agent.yml"
   workflow_dispatch:
 
@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: dev
     env:
-      AGENT_PROJECT_DIR: agents/hosted/openapi-spec-pr-creator
+      AGENT_PROJECT_DIR: agents/hosted/openapi/openapi-spec-pr-creator
       AZD_ENV_NAME: ci
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}

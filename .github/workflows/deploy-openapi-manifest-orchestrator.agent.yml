@@ -3,7 +3,7 @@ name: Deploy OpenAPI Manifest Orchestrator
 on:
   push:
     paths:
-      - "agents/hosted/openapi-manifest-orchestrator/**"
+      - "agents/hosted/openapi/openapi-manifest-orchestrator/**"
       - ".github/workflows/deploy-openapi-manifest-orchestrator.agent.yml"
   workflow_dispatch:
 
@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: dev
     env:
-      AGENT_PROJECT_DIR: agents/hosted/openapi-manifest-orchestrator
+      AGENT_PROJECT_DIR: agents/hosted/openapi/openapi-manifest-orchestrator
       AZD_ENV_NAME: ci
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}

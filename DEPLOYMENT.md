@@ -56,7 +56,7 @@ The PR creator and workflow smoke tests use invalid input deliberately. This ver
 Authenticate Azure CLI and azd, configure each agent project's azd environment with the existing project endpoint, create the `openapi-pr-github` connection, and deploy in dependency order:
 
 ```bash
-cd agents/hosted/openapi-spec-pr-creator
+cd agents/hosted/openapi/openapi-spec-pr-creator
 azd deploy openapi-spec-pr-creator --no-prompt
 ```
 

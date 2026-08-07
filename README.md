@@ -4,11 +4,11 @@ This repository contains Azure AI Foundry hosted agents that discover API source
 
 ## Pipeline
 
-1. [`openapi-source-discovery`](agents/hosted/openapi-source-discovery/README.md) scans one GitHub repository path and returns a root JSON array of `{apiFile, supportingFiles}` objects.
-2. [`openapi-spec-generator`](agents/hosted/openapi-spec-generator/README.md) accepts one discovery element and returns an OpenAPI 3.1 JSON object.
-3. [`openapi-spec-pr-creator`](agents/hosted/openapi-spec-pr-creator/README.md) accepts all generated specs, writes them to a destination repository, and opens a pull request.
-4. [`openapi-spec-workflow`](agents/hosted/openapi-spec-workflow/README.md) runs the complete sequence, invoking the generator once per discovered API and sending the combined result to the PR creator.
-5. [`openapi-manifest-orchestrator`](agents/hosted/openapi-manifest-orchestrator/README.md) checks manifest commit hashes and creates one combined specs-and-manifest pull request for changed repositories.
+1. [`openapi-source-discovery`](agents/hosted/openapi/openapi-source-discovery/README.md) scans one GitHub repository path and returns a root JSON array of `{apiFile, supportingFiles}` objects.
+2. [`openapi-spec-generator`](agents/hosted/openapi/openapi-spec-generator/README.md) accepts one discovery element and returns an OpenAPI 3.1 JSON object.
+3. [`openapi-spec-pr-creator`](agents/hosted/openapi/openapi-spec-pr-creator/README.md) accepts all generated specs, writes them to a destination repository, and opens a pull request.
+4. [`openapi-spec-workflow`](agents/hosted/openapi/openapi-spec-workflow/README.md) runs the complete sequence, invoking the generator once per discovered API and sending the combined result to the PR creator.
+5. [`openapi-manifest-orchestrator`](agents/hosted/openapi/openapi-manifest-orchestrator/README.md) checks manifest commit hashes and creates one combined specs-and-manifest pull request for changed repositories.
 
 ### Agent interactions and dependencies
 
@@ -72,7 +72,7 @@ Generated file paths are deterministic and flat. By default, `src/Api/BidsContro
 Deploy in dependency order:
 
 ```bash
-cd agents/hosted/openapi-source-discovery
+cd agents/hosted/openapi/openapi-source-discovery
 azd deploy openapi-source-discovery --no-prompt
 
 cd ../openapi-spec-generator
@@ -95,9 +95,9 @@ The manifest orchestrator is initially manual and has no schedule. Invoke it wit
 ## Test
 
 ```bash
-python3 -m unittest discover -s agents/hosted/openapi-source-discovery/src/openapi-source-discovery -p 'test_*.py'
-python3 -m unittest discover -s agents/hosted/openapi-spec-generator/src/openapi-spec-generator -p 'test_*.py'
-python3 -m unittest discover -s agents/hosted/openapi-spec-pr-creator/src/openapi-spec-pr-creator -p 'test_*.py'
-python3 -m unittest discover -s agents/hosted/openapi-spec-workflow/src/openapi-spec-workflow -p 'test_*.py'
-python3 -m unittest discover -s agents/hosted/openapi-manifest-orchestrator/src/openapi-manifest-orchestrator -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/openapi/openapi-source-discovery/src/openapi-source-discovery -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/openapi/openapi-spec-generator/src/openapi-spec-generator -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/openapi/openapi-spec-pr-creator/src/openapi-spec-pr-creator -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/openapi/openapi-spec-workflow/src/openapi-spec-workflow -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/openapi/openapi-manifest-orchestrator/src/openapi-manifest-orchestrator -p 'test_*.py'
 ```
