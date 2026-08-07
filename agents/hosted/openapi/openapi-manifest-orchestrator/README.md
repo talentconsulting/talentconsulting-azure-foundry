@@ -28,7 +28,7 @@ The manifest must use this schema:
 ]
 ```
 
-`path-to-scan` supplies both the branch and path. The agent compares `last-commit-hash-scanned` with the current head of that branch. Manifest and source reads are currently restricted to public, credential-free GitHub URLs.
+`path-to-scan` supplies both the branch and path. The agent compares `last-commit-hash-scanned` with the current head of that branch. The manifest may be shared with other pipelines: unrelated nodes are ignored, and entries without `specs` are skipped. Manifest and source reads are currently restricted to public, credential-free GitHub URLs.
 
 ## Behavior
 

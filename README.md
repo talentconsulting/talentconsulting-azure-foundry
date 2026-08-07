@@ -1,6 +1,6 @@
-# OpenAPI Agent Pipeline
+# Source Control Agent Pipelines
 
-This repository contains Azure AI Foundry hosted agents that discover API source files and payload DTOs, generate OpenAPI specifications, create pull requests, and optionally drive the pipeline from a repository manifest.
+This repository contains Azure AI Foundry hosted agents for manifest-driven source analysis. Both the OpenAPI and database-schema pipelines generate repository artefacts and create one combined pull request for all successful manifest entries.
 
 ## Pipeline
 
@@ -24,6 +24,10 @@ flowchart TD
         discovery[openapi-source-discovery]
         generator[openapi-spec-generator]
         publisher[openapi-spec-pr-creator]
+        dbManifest[dbschema-manifest-orchestrator]
+        dbWorkflow[dbschema-workflow]
+        dbGenerator[dbschema-generator]
+        dbPublisher[dbschema-pr-creator]
     end
 
     caller -->|Manifest URL| manifest
@@ -40,6 +44,15 @@ flowchart TD
     workflow -->|Direct run: publish generated specs| publisher
     manifest -->|Manifest run: publish combined specs and manifest| publisher
     publisher -->|Create branch, commit files, and open PR| target
+
+    caller -->|Database-schema manifest URL| dbManifest
+    dbManifest -->|Read manifest and branch heads| source
+    dbManifest -->|One deferred call per changed repository| dbWorkflow
+    dbWorkflow -->|Generate one database representation| dbGenerator
+    dbGenerator -->|Download bounded repository source| source
+    dbWorkflow -->|Direct run: publish schema| dbPublisher
+    dbManifest -->|Publish combined schemas and manifest| dbPublisher
+    dbPublisher -->|Create branch, commit files, and open PR| target
 ```
 
 The dependency order is:
@@ -47,8 +60,15 @@ The dependency order is:
 - `openapi-source-discovery`, `openapi-spec-generator`, and `openapi-spec-pr-creator` are leaf agents and can be deployed independently.
 - `openapi-spec-workflow` depends on all three leaf agents.
 - `openapi-manifest-orchestrator` depends on `openapi-spec-workflow` and `openapi-spec-pr-creator`.
+- `dbschema-generator` and `dbschema-pr-creator` are database-schema leaf agents.
+- `dbschema-workflow` depends on both leaf agents.
+- `dbschema-manifest-orchestrator` depends on `dbschema-workflow` and `dbschema-pr-creator`.
 
 Previous workflows, scripts, prompt agents, and documentation are retained under [`backup/`](backup/).
+
+## Database schema orchestration
+
+[`dbschema-generator`](agents/hosted/dbschema/dbschema-generator/README.md) scans a repository path for database entities and returns tables, columns, relationships, indexes, and named types. [`dbschema-workflow`](agents/hosted/dbschema/dbschema-workflow/README.md) generates and optionally publishes one repository schema. [`dbschema-manifest-orchestrator`](agents/hosted/dbschema/dbschema-manifest-orchestrator/README.md) invokes one deferred workflow per changed repository and sends all successful schemas plus the updated manifest to [`dbschema-pr-creator`](agents/hosted/dbschema/dbschema-pr-creator/README.md) in one request.
 
 ## Run the complete workflow
 
@@ -90,6 +110,22 @@ azd deploy openapi-manifest-orchestrator --no-prompt
 
 Each project also has a deployment workflow under `.github/workflows/`. See [DEPLOYMENT.md](DEPLOYMENT.md) for Azure/GitHub configuration and permissions.
 
+The database-schema agents can be deployed in their current dependency order:
+
+```bash
+cd agents/hosted/dbschema/dbschema-generator
+azd deploy dbschema-generator --no-prompt
+
+cd ../dbschema-pr-creator
+azd deploy dbschema-pr-creator --no-prompt
+
+cd ../dbschema-workflow
+azd deploy dbschema-workflow --no-prompt
+
+cd ../dbschema-manifest-orchestrator
+azd deploy dbschema-manifest-orchestrator --no-prompt
+```
+
 The manifest orchestrator is initially manual and has no schedule. Invoke it with one manifest blob URL; a Foundry routine can be added later for recurring execution.
 
 ## Test
@@ -100,4 +136,8 @@ python3 -m unittest discover -s agents/hosted/openapi/openapi-spec-generator/src
 python3 -m unittest discover -s agents/hosted/openapi/openapi-spec-pr-creator/src/openapi-spec-pr-creator -p 'test_*.py'
 python3 -m unittest discover -s agents/hosted/openapi/openapi-spec-workflow/src/openapi-spec-workflow -p 'test_*.py'
 python3 -m unittest discover -s agents/hosted/openapi/openapi-manifest-orchestrator/src/openapi-manifest-orchestrator -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/dbschema/dbschema-manifest-orchestrator/src/dbschema-manifest-orchestrator -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/dbschema/dbschema-generator/src/dbschema-generator -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/dbschema/dbschema-pr-creator/src/dbschema-pr-creator -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/dbschema/dbschema-workflow/src/dbschema-workflow -p 'test_*.py'
 ```

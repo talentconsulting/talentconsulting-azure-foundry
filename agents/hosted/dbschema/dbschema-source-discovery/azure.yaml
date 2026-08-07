@@ -1,0 +1,25 @@
+name: dbschema-source-discovery
+services:
+  dbschema-source-discovery:
+    project: src/dbschema-source-discovery
+    host: azure.ai.agent
+    language: python
+    uses: [ai-project]
+    codeConfiguration:
+      dependencyResolution: remote_build
+      entryPoint: main.py
+      runtime: python_3_13
+    container:
+      resources: { cpu: "0.5", memory: 1Gi }
+    description: Selects bounded, authoritative database schema source files from one public GitHub repository path.
+    kind: hosted
+    name: dbschema-source-discovery
+    displayName: Database Schema Source Discovery
+    protocols:
+      - protocol: responses
+        version: 2.0.0
+  ai-project:
+    host: azure.ai.project
+    endpoint: ${AZURE_AI_PROJECT_ENDPOINT}
+infra:
+  provider: microsoft.foundry

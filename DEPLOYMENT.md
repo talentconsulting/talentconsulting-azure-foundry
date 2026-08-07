@@ -1,6 +1,6 @@
 # Deployment
 
-The pipeline uses an existing Azure AI Foundry project and four hosted agents. Deploy them in this order:
+The OpenAPI pipeline uses an existing Azure AI Foundry project and five hosted agents. Deploy them in this order:
 
 1. `openapi-source-discovery`
 2. `openapi-spec-generator`
@@ -29,6 +29,8 @@ Create a Foundry Custom keys project connection named `openapi-pr-github` with a
 
 The PR creator resolves the token from `${{connections.openapi-pr-github.credentials.github_token}}` when its sandbox starts. It is not stored in the agent definition, passed to the orchestration agent, or accepted in an agent request.
 
+The database-schema PR creator reuses `openapi-pr-github`, because it publishes to the same catalogue repository with the same permissions. No second GitHub secret or Foundry connection is required.
+
 Optional `dev` environment variables are:
 
 | Variable | Default |
@@ -48,6 +50,10 @@ The following workflows run on changes to their agent on the default branch and 
 - `.github/workflows/deploy-openapi-spec-pr-creator.agent.yml`
 - `.github/workflows/deploy-openapi-spec-workflow.agent.yml`
 - `.github/workflows/deploy-openapi-manifest-orchestrator.agent.yml`
+- `.github/workflows/deploy-dbschema-manifest-orchestrator.agent.yml`
+- `.github/workflows/deploy-dbschema-generator.agent.yml`
+- `.github/workflows/deploy-dbschema-pr-creator.agent.yml`
+- `.github/workflows/deploy-dbschema-workflow.agent.yml`
 
 The PR creator and workflow smoke tests use invalid input deliberately. This verifies the hosted Responses endpoint without writing to a repository during deployment.
 
@@ -70,3 +76,5 @@ azd deploy openapi-spec-workflow --no-prompt
 No destination repository is fixed at deployment time. Supply it as `targetRepository` whenever the workflow is invoked.
 
 `openapi-manifest-orchestrator` instead derives its destination from the repository containing its manifest. No routine or schedule is deployed initially; invoke the hosted agent directly while testing.
+
+Deploy the database-schema agents in this order: `dbschema-generator`, `dbschema-pr-creator`, `dbschema-workflow`, then `dbschema-manifest-orchestrator`. Their validation smoke tests do not read GitHub, invoke the model, or change repositories.

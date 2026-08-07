@@ -1,4 +1,4 @@
-"""Manifest-driven OpenAPI workflow orchestration."""
+"""Manifest-driven database-schema workflow orchestration."""
 
 from __future__ import annotations
 
@@ -14,6 +14,8 @@ from typing import Any, Callable
 
 MAX_MANIFEST_BYTES = 1024 * 1024
 COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
+DBSCHEMA_NODE = "dbschema"
+LEGACY_DBSCHEMA_NODE = "db-schema"
 
 
 class ManifestError(ValueError):
@@ -43,6 +45,7 @@ class ManifestEntry:
     scan_path: str
     path_to_scan: str
     last_commit: str
+    manifest_node: str
 
     @property
     def source_url(self) -> str:
@@ -92,7 +95,7 @@ def parse_blob_url(value: str) -> GitHubBlob:
 
 
 def _read_url(url: str) -> bytes:
-    request = urllib.request.Request(url, headers={"User-Agent": "openapi-manifest-orchestrator"})
+    request = urllib.request.Request(url, headers={"User-Agent": "dbschema-manifest-orchestrator"})
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             declared_size = int(response.headers.get("Content-Length", "0") or "0")
@@ -156,17 +159,25 @@ def validate_manifest(value: object, max_entries: int) -> list[ManifestEntry]:
     for index, item in enumerate(value):
         if not isinstance(item, dict):
             raise ManifestError("invalid_manifest", f"Manifest entry {index} has an invalid shape.")
-        # A shared manifest may contain entries for other domains, including
-        # arbitrary metadata.  Only validate entries owned by this domain.
-        if "specs" not in item:
+        has_dbschema = DBSCHEMA_NODE in item
+        has_legacy_dbschema = LEGACY_DBSCHEMA_NODE in item
+        # Ignore entries owned by other domains.  `db-schema` is retained as a
+        # read-compatible alias while manifests migrate to the `dbschema` name.
+        if not has_dbschema and not has_legacy_dbschema:
             continue
+        if has_dbschema and has_legacy_dbschema:
+            raise ManifestError(
+                "invalid_manifest",
+                f"Manifest entry {index} must not contain both {DBSCHEMA_NODE} and {LEGACY_DBSCHEMA_NODE}.",
+            )
         if "github-repo" not in item:
             raise ManifestError("invalid_manifest", f"Manifest entry {index} has an invalid shape.")
-        specs = item["specs"]
-        if not isinstance(specs, dict) or set(specs) != {"path-to-scan", "last-commit-hash-scanned"}:
-            raise ManifestError("invalid_manifest", f"Manifest entry {index}.specs has an invalid shape.")
+        manifest_node = DBSCHEMA_NODE if has_dbschema else LEGACY_DBSCHEMA_NODE
+        dbschema = item[manifest_node]
+        if not isinstance(dbschema, dict) or set(dbschema) != {"path-to-scan", "last-commit-hash-scanned"}:
+            raise ManifestError("invalid_manifest", f"Manifest entry {index}.db-schema has an invalid shape.")
         owner, repository, repository_url = _parse_repository(item["github-repo"], f"Manifest entry {index}.github-repo")
-        path_to_scan = specs["path-to-scan"]
+        path_to_scan = dbschema["path-to-scan"]
         if not isinstance(path_to_scan, str):
             raise ManifestError("invalid_manifest", f"Manifest entry {index}.path-to-scan must be a string.")
         path_parts = [urllib.parse.unquote(part) for part in path_to_scan.strip("/").split("/")]
@@ -175,7 +186,7 @@ def validate_manifest(value: object, max_entries: int) -> list[ManifestEntry]:
                 "invalid_manifest",
                 f"Manifest entry {index}.path-to-scan must match tree/ref[/path].",
             )
-        last_commit = specs["last-commit-hash-scanned"]
+        last_commit = dbschema["last-commit-hash-scanned"]
         if not isinstance(last_commit, str) or (last_commit and not COMMIT_PATTERN.fullmatch(last_commit)):
             raise ManifestError(
                 "invalid_manifest",
@@ -195,6 +206,7 @@ def validate_manifest(value: object, max_entries: int) -> list[ManifestEntry]:
                 scan_path="/".join(path_parts[2:]),
                 path_to_scan="/".join(path_parts),
                 last_commit=last_commit,
+                manifest_node=manifest_node,
             )
         )
     return entries
@@ -250,42 +262,33 @@ def invoke_agent(
     raise last_error
 
 
-def _spec_target_path(entry: ManifestEntry, api_file: object) -> str:
-    if not isinstance(api_file, str):
-        raise ManifestError("invalid_workflow_output", "Generated apiFile must be a string.")
-    parsed = urllib.parse.urlparse(api_file)
-    parts = [urllib.parse.unquote(part) for part in parsed.path.split("/") if part]
-    if len(parts) < 5 or parts[0] != entry.owner or parts[1] != entry.repository or parts[2] != "blob":
-        raise ManifestError("invalid_workflow_output", "Generated apiFile does not match its manifest repository.")
-    filename = parts[-1]
-    stem = filename.rsplit(".", 1)[0] if "." in filename else filename
-    return f"{entry.repository}/open-api/{stem}.openapi.json"
-
-
-def _validate_deferred_output(value: Any, entry: ManifestEntry) -> list[dict[str, Any]]:
+def _validate_workflow_output(value: Any, entry: ManifestEntry) -> list[dict[str, Any]]:
     if not isinstance(value, dict) or not isinstance(value.get("success"), bool):
-        raise ManifestError("invalid_workflow_output", "Spec workflow returned an invalid response.")
+        raise ManifestError("invalid_workflow_output", "Database-schema workflow returned an invalid response.")
     if not value["success"]:
-        message = "Specification workflow did not completely generate this repository."
-        errors = value.get("generationErrors")
-        if isinstance(errors, list) and errors:
-            message = f"{message} {len(errors)} generation error(s)."
-        raise ManifestError("spec_generation_failed", message)
-    specifications = value.get("specifications")
-    if not isinstance(specifications, list) or not specifications:
-        raise ManifestError("invalid_workflow_output", "Spec workflow returned no specifications.")
-    result = []
-    for item in specifications:
-        if not isinstance(item, dict) or set(item) != {"apiFile", "specification"}:
-            raise ManifestError("invalid_workflow_output", "A generated specification has an invalid shape.")
-        result.append(
-            {
-                "apiFile": item["apiFile"],
-                "specification": item["specification"],
-                "targetPath": _spec_target_path(entry, item["apiFile"]),
-            }
-        )
-    return result
+        errors = value.get("generationErrors") or value.get("errors") or []
+        detail = errors[0].get("message") if errors and isinstance(errors[0], dict) else "Schema generation failed."
+        raise ManifestError("schema_generation_failed", str(detail))
+    schemas = value.get("schemas")
+    if not isinstance(schemas, list) or len(schemas) != 1:
+        raise ManifestError("invalid_workflow_output", "Database-schema workflow must return exactly one schema.")
+    item = schemas[0]
+    if not isinstance(item, dict) or set(item) != {"sourceUrl", "schema"}:
+        raise ManifestError("invalid_workflow_output", "Database-schema workflow returned an invalid schema item.")
+    if item["sourceUrl"] != entry.source_url:
+        raise ManifestError("invalid_workflow_output", "Database-schema workflow returned a schema for another source.")
+    schema = item["schema"]
+    if not isinstance(schema, dict) or set(schema) != {"database", "tables", "types"}:
+        raise ManifestError("invalid_workflow_output", "Database-schema workflow returned an invalid schema.")
+    if not isinstance(schema["database"], dict) or not isinstance(schema["tables"], list) or not schema["tables"] or not isinstance(schema["types"], list):
+        raise ManifestError("invalid_workflow_output", "Database-schema workflow returned an incomplete schema.")
+    return [
+        {
+            "sourceUrl": item["sourceUrl"],
+            "schema": schema,
+            "targetPath": f"{entry.repository}/db-schema/database.schema.json",
+        }
+    ]
 
 
 def run_manifest(
@@ -295,7 +298,7 @@ def run_manifest(
     publisher_name: str,
     model: str,
     max_entries: int = 25,
-    max_specs: int = 100,
+    max_schemas: int = 100,
     manifest_loader: Callable[[GitHubBlob], object] = download_manifest,
     commit_resolver: Callable[[ManifestEntry], str] = latest_commit,
     invoker: Callable[..., Any] = invoke_agent,
@@ -333,13 +336,13 @@ def run_manifest(
             "checkedCount": len(entries),
             "changedCount": 0,
             "generatedRepositoryCount": 0,
-            "generatedSpecCount": 0,
+            "generatedSchemaCount": 0,
             "upToDate": up_to_date,
             "failures": failures,
             "pullRequest": None,
         }
 
-    combined_specs: list[dict[str, Any]] = []
+    combined_schemas: list[dict[str, Any]] = []
     generated_repositories: list[dict[str, str]] = []
     for entry, commit in changed:
         try:
@@ -349,23 +352,23 @@ def run_manifest(
                 model,
                 {"sourceUrl": entry.source_url, "deferPublication": True},
             )
-            specifications = _validate_deferred_output(workflow_result, entry)
-            if len(combined_specs) + len(specifications) > max_specs:
-                raise ManifestError("too_many_specifications", f"A run may publish at most {max_specs} specs.")
-            combined_specs.extend(specifications)
-            updated_manifest[entry.index]["specs"]["last-commit-hash-scanned"] = commit
+            schemas = _validate_workflow_output(workflow_result, entry)
+            if len(combined_schemas) + len(schemas) > max_schemas:
+                raise ManifestError("too_many_schemas", f"A run may publish at most {max_schemas} database schemas.")
+            combined_schemas.extend(schemas)
+            updated_manifest[entry.index][entry.manifest_node]["last-commit-hash-scanned"] = commit
             generated_repositories.append({"repository": entry.repository_name, "commit": commit})
         except Exception as error:
             failures.append(
                 {
                     "repository": entry.repository_name,
-                    "stage": "spec_generation",
+                    "stage": "schema_workflow",
                     "errorType": type(error).__name__,
                     "message": str(error)[:300],
                 }
             )
 
-    if not combined_specs:
+    if not combined_schemas:
         return {
             "success": False,
             "status": "failed",
@@ -373,7 +376,7 @@ def run_manifest(
             "checkedCount": len(entries),
             "changedCount": len(changed),
             "generatedRepositoryCount": 0,
-            "generatedSpecCount": 0,
+            "generatedSchemaCount": 0,
             "upToDate": up_to_date,
             "failures": failures,
             "pullRequest": None,
@@ -385,12 +388,12 @@ def run_manifest(
         model,
         {
             "repository": f"{blob.owner}/{blob.repository}",
-            "specifications": combined_specs,
+            "schemas": combined_schemas,
             "baseBranch": blob.ref,
             "manifestFile": {"path": blob.path, "content": updated_manifest},
-            "pullRequestTitle": "Update generated OpenAPI specifications",
+            "pullRequestTitle": "Update generated database schemas",
             "pullRequestBody": (
-                "Generated OpenAPI specifications for repositories whose branch-head commit changed. "
+                "Generated database schemas for repositories whose branch-head commit changed. "
                 "The manifest commit hashes are updated in the same pull request."
             ),
         },
@@ -405,7 +408,7 @@ def run_manifest(
         "checkedCount": len(entries),
         "changedCount": len(changed),
         "generatedRepositoryCount": len(generated_repositories),
-        "generatedSpecCount": len(combined_specs),
+        "generatedSchemaCount": len(combined_schemas),
         "generatedRepositories": generated_repositories,
         "upToDate": up_to_date,
         "failures": failures,

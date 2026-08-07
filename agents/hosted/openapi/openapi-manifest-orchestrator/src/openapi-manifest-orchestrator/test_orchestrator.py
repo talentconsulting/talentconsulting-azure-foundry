@@ -41,6 +41,27 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual("main", entry.ref)
         self.assertEqual("https://github.com/source/app/tree/main/src/Api", entry.source_url)
 
+    def test_shared_manifest_ignores_db_schema_and_entries_without_specs(self):
+        shared = manifest("")
+        shared[0]["db-schema"] = {
+            "path-to-scan": "tree/main/src/Data",
+            "last-commit-hash-scanned": "",
+        }
+        shared.append(
+            {
+                "dbschema": {
+                    "path-to-scan": "tree/main/src/Data",
+                    "last-commit-hash-scanned": "",
+                },
+                "owner": "data-platform",
+            }
+        )
+
+        entries = validate_manifest(shared, 25)
+
+        self.assertEqual(1, len(entries))
+        self.assertEqual("source/app", entries[0].repository_name)
+
     def test_rejects_duplicate_repositories(self):
         with self.assertRaisesRegex(ManifestError, "duplicated"):
             validate_manifest(manifest() + manifest(), 25)

@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+requiredVersions:
+  extensions:
+    azure.ai.agents: '>=1.0.0-beta.4'
+
+name: dbschema-generator
+
+services:
+  dbschema-generator:
+    project: src/dbschema-generator
+    host: azure.ai.agent
+    language: python
+    uses:
+      - ai-project
+    codeConfiguration:
+      dependencyResolution: remote_build
+      entryPoint: main.py
+      runtime: python_3_13
+    container:
+      resources:
+        cpu: "0.5"
+        memory: 1Gi
+    description: Scans one GitHub repository path for database entities and returns a validated JSON representation of tables, columns, relationships, indexes, and types.
+    environmentVariables:
+      - name: AZURE_AI_MODEL_DEPLOYMENT_NAME
+        value: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
+    kind: hosted
+    name: dbschema-generator
+    displayName: Database Schema Generator
+    protocols:
+      - protocol: responses
+        version: 2.0.0
+
+  ai-project:
+    host: azure.ai.project
+    endpoint: ${AZURE_AI_PROJECT_ENDPOINT}
+
+infra:
+  provider: microsoft.foundry
