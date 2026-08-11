@@ -22,6 +22,7 @@ GENERATOR_NAME = os.getenv("DBSCHEMA_GENERATOR_AGENT_NAME", "dbschema-generator"
 DISCOVERY_NAME = os.getenv("DBSCHEMA_DISCOVERY_AGENT_NAME", "dbschema-source-discovery")
 PUBLISHER_NAME = os.getenv("DBSCHEMA_PR_CREATOR_AGENT_NAME", "dbschema-pr-creator")
 MAX_FILES = int(os.getenv("DBSCHEMA_DISCOVERY_MAX_FILES", "100"))
+GENERATOR_BATCH_SIZE = int(os.getenv("DBSCHEMA_GENERATOR_BATCH_SIZE", "5"))
 if not PROJECT_ENDPOINT:
     raise EnvironmentError("FOUNDRY_PROJECT_ENDPOINT is required.")
 
@@ -57,7 +58,15 @@ async def handle_create(request: CreateResponse, context: ResponseContext, cance
         payload = parse_workflow_request(await context.get_input_text() or "")
         source_url = payload["sourceUrl"]
         result = await asyncio.to_thread(
-            run_workflow, project_client, payload, DISCOVERY_NAME, GENERATOR_NAME, PUBLISHER_NAME, MODEL, MAX_FILES
+            run_workflow,
+            project_client,
+            payload,
+            DISCOVERY_NAME,
+            GENERATOR_NAME,
+            PUBLISHER_NAME,
+            MODEL,
+            MAX_FILES,
+            GENERATOR_BATCH_SIZE,
         )
     except Exception as error:
         logger.exception("Database-schema workflow failed.")

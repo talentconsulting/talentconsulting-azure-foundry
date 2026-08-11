@@ -33,6 +33,19 @@ class ScanTests(unittest.TestCase):
             result["excludedFiles"],
         )
 
+    def test_ignores_regression_test_directories_and_projects(self):
+        base = "https://github.com/source/catalog/tree/main/src"
+        result = scan(base, archive({
+            "src/Database/Tables/Order.cs": "class Order { public int Id { get; set; } }",
+            "src/Database/RegressionTests/OrderRegression.cs": "migrationBuilder.CreateTable(name: \"Ignored\");",
+            "src/Database.RegressionTests/OrderRegression.cs": "migrationBuilder.CreateTable(name: \"Ignored\");",
+        }))
+
+        self.assertEqual(
+            ["https://github.com/source/catalog/blob/main/src/Database/Tables/Order.cs"],
+            result["schemaFiles"],
+        )
+
     def test_never_selects_files_outside_the_requested_tree(self):
         result = scan(SOURCE, archive({
             "src/Database/Tables/Order.cs": "class Order {}",

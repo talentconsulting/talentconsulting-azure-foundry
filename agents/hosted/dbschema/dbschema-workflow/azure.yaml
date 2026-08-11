@@ -33,6 +33,8 @@ services:
         value: ${DBSCHEMA_PR_CREATOR_AGENT_NAME}
       - name: DBSCHEMA_DISCOVERY_MAX_FILES
         value: ${DBSCHEMA_DISCOVERY_MAX_FILES}
+      - name: DBSCHEMA_GENERATOR_BATCH_SIZE
+        value: ${DBSCHEMA_GENERATOR_BATCH_SIZE}
     kind: hosted
     name: dbschema-workflow
     displayName: Database Schema Workflow

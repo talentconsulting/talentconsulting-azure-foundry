@@ -1,0 +1,19 @@
+name: Deploy Service Dependency Generator
+
+on:
+  push:
+    paths:
+      - "agents/hosted/servicedependencies/service-dependency-generator/**"
+      - ".github/workflows/deploy-service-dependency-generator.agent.yml"
+      - ".github/workflows/deploy-service-dependency-agent.reusable.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    if: github.event_name != 'push' || github.ref_name == github.event.repository.default_branch
+    uses: ./.github/workflows/deploy-service-dependency-agent.reusable.yml
+    with:
+      project_dir: agents/hosted/servicedependencies/service-dependency-generator
+      service_name: service-dependency-generator
+      expected_marker: invalid_input
+    secrets: inherit

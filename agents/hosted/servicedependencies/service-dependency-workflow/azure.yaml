@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+requiredVersions:
+  extensions:
+    azure.ai.agents: '>=1.0.0-beta.4'
+
+name: service-dependency-workflow
+
+services:
+  service-dependency-workflow:
+    project: src/service-dependency-workflow
+    host: azure.ai.agent
+    language: python
+    uses: [ai-project]
+    codeConfiguration:
+      dependencyResolution: remote_build
+      entryPoint: main.py
+      runtime: python_3_13
+    container:
+      resources: { cpu: "0.5", memory: 1Gi }
+    description: Coordinates complete service-dependency discovery, generation, validation, and optional pull-request publication for one repository path.
+    environmentVariables:
+      - name: SERVICE_DEPENDENCY_DISCOVERY_AGENT_NAME
+        value: ${SERVICE_DEPENDENCY_DISCOVERY_AGENT_NAME}
+      - name: SERVICE_DEPENDENCY_GENERATOR_AGENT_NAME
+        value: ${SERVICE_DEPENDENCY_GENERATOR_AGENT_NAME}
+      - name: SERVICE_DEPENDENCY_PR_CREATOR_AGENT_NAME
+        value: ${SERVICE_DEPENDENCY_PR_CREATOR_AGENT_NAME}
+      - name: SERVICE_DEPENDENCY_DISCOVERY_MAX_FILES
+        value: ${SERVICE_DEPENDENCY_DISCOVERY_MAX_FILES}
+      - name: SERVICE_DEPENDENCY_GENERATOR_BATCH_SIZE
+        value: ${SERVICE_DEPENDENCY_GENERATOR_BATCH_SIZE}
+      - name: AZURE_AI_MODEL_DEPLOYMENT_NAME
+        value: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
+    kind: hosted
+    name: service-dependency-workflow
+    displayName: Service Dependency Workflow
+    protocols:
+      - protocol: responses
+        version: 2.0.0
+  ai-project:
+    host: azure.ai.project
+    endpoint: ${AZURE_AI_PROJECT_ENDPOINT}
+
+infra:
+  provider: microsoft.foundry

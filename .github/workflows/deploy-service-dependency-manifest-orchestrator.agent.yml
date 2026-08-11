@@ -1,0 +1,19 @@
+name: Deploy Service Dependency Manifest Orchestrator
+
+on:
+  push:
+    paths:
+      - "agents/hosted/servicedependencies/service-dependency-manifest-orchestrator/**"
+      - ".github/workflows/deploy-service-dependency-manifest-orchestrator.agent.yml"
+      - ".github/workflows/deploy-service-dependency-agent.reusable.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    if: github.event_name != 'push' || github.ref_name == github.event.repository.default_branch
+    uses: ./.github/workflows/deploy-service-dependency-agent.reusable.yml
+    with:
+      project_dir: agents/hosted/servicedependencies/service-dependency-manifest-orchestrator
+      service_name: service-dependency-manifest-orchestrator
+      expected_marker: invalid_input
+    secrets: inherit

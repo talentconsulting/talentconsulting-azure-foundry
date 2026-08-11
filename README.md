@@ -1,6 +1,6 @@
 # Source Control Agent Pipelines
 
-This repository contains Azure AI Foundry hosted agents for manifest-driven source analysis. Both the OpenAPI and database-schema pipelines generate repository artefacts and create one combined pull request for all successful manifest entries.
+This repository contains Azure AI Foundry hosted agents for manifest-driven source analysis. The OpenAPI, database-schema, event/command-catalog, and external-service-dependency pipelines generate repository artefacts and create one combined pull request for all successful manifest entries.
 
 ## Pipeline
 
@@ -63,12 +63,36 @@ The dependency order is:
 - `dbschema-generator` and `dbschema-pr-creator` are database-schema leaf agents.
 - `dbschema-workflow` depends on both leaf agents.
 - `dbschema-manifest-orchestrator` depends on `dbschema-workflow` and `dbschema-pr-creator`.
+- `eventcatalog-source-discovery`, `eventcatalog-generator`, and `eventcatalog-pr-creator` are leaf agents.
+- `eventcatalog-workflow` depends on those three leaf agents.
+- `eventcatalog-manifest-orchestrator` depends on `eventcatalog-workflow` and `eventcatalog-pr-creator`.
+- `service-dependency-source-discovery`, `service-dependency-generator`, and `service-dependency-pr-creator` are leaf agents.
+- `service-dependency-workflow` depends on those three leaf agents.
+- `service-dependency-manifest-orchestrator` depends on `service-dependency-workflow` and `service-dependency-pr-creator`.
 
 Previous workflows, scripts, prompt agents, and documentation are retained under [`backup/`](backup/).
 
 ## Database schema orchestration
 
 [`dbschema-generator`](agents/hosted/dbschema/dbschema-generator/README.md) scans a repository path for database entities and returns tables, columns, relationships, indexes, and named types. [`dbschema-workflow`](agents/hosted/dbschema/dbschema-workflow/README.md) generates and optionally publishes one repository schema. [`dbschema-manifest-orchestrator`](agents/hosted/dbschema/dbschema-manifest-orchestrator/README.md) invokes one deferred workflow per changed repository and sends all successful schemas plus the updated manifest to [`dbschema-pr-creator`](agents/hosted/dbschema/dbschema-pr-creator/README.md) in one request.
+
+## Event and command catalog orchestration
+
+[`eventcatalog-source-discovery`](agents/hosted/eventcatalog/eventcatalog-source-discovery/README.md) deterministically selects message and handler files. [`eventcatalog-generator`](agents/hosted/eventcatalog/eventcatalog-generator/README.md) extracts validated commands, events, fields, and handlers. [`eventcatalog-workflow`](agents/hosted/eventcatalog/eventcatalog-workflow/README.md) writes one `<repository>/event-catalog/events-and-commands.json` file through [`eventcatalog-pr-creator`](agents/hosted/eventcatalog/eventcatalog-pr-creator/README.md), while [`eventcatalog-manifest-orchestrator`](agents/hosted/eventcatalog/eventcatalog-manifest-orchestrator/README.md) combines changed repositories and the manifest update into one PR.
+
+## Service dependency orchestration
+
+[`service-dependency-source-discovery`](agents/hosted/servicedependencies/service-dependency-source-discovery/README.md) deterministically selects client, registration, configuration, messaging, database, cache, storage, and cloud-integration sources. [`service-dependency-generator`](agents/hosted/servicedependencies/service-dependency-generator/README.md) extracts a validated catalog without returning secret values. [`service-dependency-workflow`](agents/hosted/servicedependencies/service-dependency-workflow/README.md) writes one `<repository>/service-dependencies/service-dependencies.json` file through [`service-dependency-pr-creator`](agents/hosted/servicedependencies/service-dependency-pr-creator/README.md), while [`service-dependency-manifest-orchestrator`](agents/hosted/servicedependencies/service-dependency-manifest-orchestrator/README.md) processes only `service-dependencies` nodes and combines changed repositories with the manifest update in one PR.
+
+```json
+{
+  "github-repo": "https://github.com/owner/application",
+  "service-dependencies": {
+    "path-to-scan": "tree/main/src",
+    "last-commit-hash-scanned": ""
+  }
+}
+```
 
 ## Run the complete workflow
 
@@ -128,6 +152,44 @@ azd deploy dbschema-manifest-orchestrator --no-prompt
 
 The manifest orchestrator is initially manual and has no schedule. Invoke it with one manifest blob URL; a Foundry routine can be added later for recurring execution.
 
+The event catalog agents use the same dependency order:
+
+```bash
+cd agents/hosted/eventcatalog/eventcatalog-source-discovery
+azd deploy eventcatalog-source-discovery --no-prompt
+
+cd ../eventcatalog-generator
+azd deploy eventcatalog-generator --no-prompt
+
+cd ../eventcatalog-pr-creator
+azd deploy eventcatalog-pr-creator --no-prompt
+
+cd ../eventcatalog-workflow
+azd deploy eventcatalog-workflow --no-prompt
+
+cd ../eventcatalog-manifest-orchestrator
+azd deploy eventcatalog-manifest-orchestrator --no-prompt
+```
+
+The service-dependency agents use the same dependency order:
+
+```bash
+cd agents/hosted/servicedependencies/service-dependency-source-discovery
+azd deploy service-dependency-source-discovery --no-prompt
+
+cd ../service-dependency-generator
+azd deploy service-dependency-generator --no-prompt
+
+cd ../service-dependency-pr-creator
+azd deploy service-dependency-pr-creator --no-prompt
+
+cd ../service-dependency-workflow
+azd deploy service-dependency-workflow --no-prompt
+
+cd ../service-dependency-manifest-orchestrator
+azd deploy service-dependency-manifest-orchestrator --no-prompt
+```
+
 ## Test
 
 ```bash
@@ -140,4 +202,14 @@ python3 -m unittest discover -s agents/hosted/dbschema/dbschema-manifest-orchest
 python3 -m unittest discover -s agents/hosted/dbschema/dbschema-generator/src/dbschema-generator -p 'test_*.py'
 python3 -m unittest discover -s agents/hosted/dbschema/dbschema-pr-creator/src/dbschema-pr-creator -p 'test_*.py'
 python3 -m unittest discover -s agents/hosted/dbschema/dbschema-workflow/src/dbschema-workflow -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/eventcatalog/eventcatalog-source-discovery/src/eventcatalog-source-discovery -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/eventcatalog/eventcatalog-generator/src/eventcatalog-generator -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/eventcatalog/eventcatalog-pr-creator/src/eventcatalog-pr-creator -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/eventcatalog/eventcatalog-workflow/src/eventcatalog-workflow -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/eventcatalog/eventcatalog-manifest-orchestrator/src/eventcatalog-manifest-orchestrator -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/servicedependencies/service-dependency-source-discovery/src/service-dependency-source-discovery -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/servicedependencies/service-dependency-generator/src/service-dependency-generator -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/servicedependencies/service-dependency-pr-creator/src/service-dependency-pr-creator -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/servicedependencies/service-dependency-workflow/src/service-dependency-workflow -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/servicedependencies/service-dependency-manifest-orchestrator/src/service-dependency-manifest-orchestrator -p 'test_*.py'
 ```

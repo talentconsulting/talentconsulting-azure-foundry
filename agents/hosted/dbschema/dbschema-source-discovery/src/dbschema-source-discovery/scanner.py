@@ -17,8 +17,8 @@ MAX_FILES = 100
 MAX_FILE_BYTES = 512 * 1024
 MAX_TOTAL_BYTES = 2 * 1024 * 1024
 SUPPORTED_EXTENSIONS = {".cs", ".go", ".java", ".js", ".jsx", ".kt", ".php", ".prisma", ".py", ".rb", ".sql", ".ts", ".tsx", ".xml", ".yaml", ".yml"}
-IGNORED_PARTS = {".git", ".github", ".idea", ".vs", ".vscode", "adhocscripts", "bin", "build", "dist", "node_modules", "obj", "packages", "test", "tests", "unittests", "integrationtests", "acceptancetests", "testharness", "fakeservers"}
-IGNORED_SUFFIXES = (".tests", ".unittests", ".integrationtests", ".acceptancetests", ".testharness", ".fakeservers")
+IGNORED_PARTS = {".git", ".github", ".idea", ".vs", ".vscode", "adhocscripts", "bin", "build", "dist", "node_modules", "obj", "packages", "test", "tests", "unittests", "integrationtests", "acceptancetests", "regressiontests", "regression", "testharness", "fakeservers"}
+IGNORED_SUFFIXES = (".tests", ".unittests", ".integrationtests", ".acceptancetests", ".regressiontests", ".testharness", ".fakeservers")
 DATABASE_PATH_PARTS = {"data", "database", "db", "entities", "entity", "migrations", "models", "persistence", "prisma", "schema", "schemas", "tables"}
 DATABASE_MARKER_RE = re.compile(r"\b(?:DbContext|DbSet\s*<|IEntityTypeConfiguration\s*<|EntityTypeBuilder\s*<|CreateTable\s*\(|CreateIndex\s*\(|CREATE\s+(?:TABLE|INDEX|TYPE)\b|ALTER\s+TABLE\b|FOREIGN\s+KEY\b|model\s+\w+\s*\{|enum\s+\w+\s*\{|declarative_base\s*\(|mapped_column\s*\(|relationship\s*\(|@Entity\b|@Table\b|sequelize\.define\s*\(|DataTypes\.|gorm:\"|ActiveRecord::Migration|create_table\s+|Schema::create\s+|Doctrine\\ORM|databaseChangeLog|<createTable\b|<entity\b)", re.IGNORECASE)
 

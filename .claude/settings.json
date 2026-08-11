@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(azd ai *)",
+      "Bash(az monitor *)",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 -)",
+      "Bash(azd deploy *)",
+      "Bash(gh api *)",
+      "Bash(python3 -m json.tool)",
+      "Bash(python3 -m unittest discover -s src/dbschema-workflow -p 'test_*.py' -v)",
+      "Read(//tmp/**)",
+      "Bash(python3 -m unittest discover -s src/dbschema-generator -p 'test_*.py' -v)",
+      "Bash(cd /Users/richard/development/talent-consulting/ai-source-control-template/agents/hosted/dbschema/dbschema-workflow *)",
+      "Bash(python3 -m unittest discover -s src/dbschema-generator -p 'test_*.py')",
+      "Read(//private/tmp/**)"
+    ],
+    "additionalDirectories": [
+      "/tmp"
+    ]
+  }
+}

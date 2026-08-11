@@ -132,6 +132,40 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(1, result["generatedSchemaCount"])
         self.assertEqual(["workflow", "publisher"], [call[0] for call in calls])
 
+    def test_partial_generation_warnings_are_surfaced_but_still_published(self):
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "workflow":
+                return {
+                    "success": True,
+                    "schemas": [{"sourceUrl": payload["sourceUrl"], "schema": SCHEMA}],
+                    "generationErrors": [
+                        {
+                            "sourceUrl": payload["sourceUrl"],
+                            "files": ["https://github.com/source/app/blob/main/src/Data/Weird.sql"],
+                            "errorType": "WorkflowError",
+                            "message": "tables[0] has an invalid shape.",
+                        }
+                    ],
+                }
+            if name == "publisher":
+                return {"success": True, "status": "created"}
+            raise AssertionError(name)
+
+        result = run_manifest(
+            object(),
+            {"sourceUrl": MANIFEST_URL},
+            "workflow",
+            "publisher",
+            "gpt-4o",
+            manifest_loader=lambda blob: manifest(),
+            commit_resolver=lambda entry: NEW_SHA,
+            invoker=invoke,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(1, len(result["generatedRepositories"][0]["warnings"]))
+        self.assertIn("invalid shape", result["generatedRepositories"][0]["warnings"][0]["message"])
+
     def test_calls_workflow_once_for_every_changed_dbschema_repository(self):
         second = manifest()
         second[0]["github-repo"] = "https://github.com/source/accounts"

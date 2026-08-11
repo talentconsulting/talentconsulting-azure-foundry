@@ -103,7 +103,7 @@ def validate_schema(value: Any) -> dict[str, Any]:
         raise WorkflowError("invalid_generator_output", "Generator response must contain database, tables, and types.")
     if not isinstance(value["database"], dict) or set(value["database"]) != {"name", "engine"}:
         raise WorkflowError("invalid_generator_output", "Generator response contains an invalid database object.")
-    if not isinstance(value["tables"], list) or not value["tables"] or not isinstance(value["types"], list):
+    if not isinstance(value["tables"], list) or not isinstance(value["types"], list):
         raise WorkflowError("invalid_generator_output", "Generator response contains an incomplete database schema.")
     return value
 
@@ -157,6 +157,60 @@ def invoke_agent(project: Any, agent_name: str, model: str, payload: dict[str, A
     raise last_error
 
 
+def merge_schemas(schemas: list[dict[str, Any]]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    database_name: str | None = None
+    database_engine: str | None = None
+    tables: list[dict[str, Any]] = []
+    table_identities: set[tuple[Any, Any]] = set()
+    types: list[dict[str, Any]] = []
+    type_names: set[str] = set()
+    warnings: list[dict[str, Any]] = []
+    for schema in schemas:
+        database_name = database_name or schema["database"]["name"]
+        database_engine = database_engine or schema["database"]["engine"]
+        for table in schema["tables"]:
+            identity = (table["schema"], table["name"])
+            if identity in table_identities:
+                warnings.append(
+                    {
+                        "errorType": "DuplicateTable",
+                        "message": (
+                            f"Generator produced table {table['name']!r} more than once; "
+                            "kept the first occurrence and discarded the duplicate."
+                        ),
+                    }
+                )
+                continue
+            table_identities.add(identity)
+            tables.append(table)
+        for named_type in schema["types"]:
+            if named_type["name"] not in type_names:
+                type_names.add(named_type["name"])
+                types.append(named_type)
+    return {"database": {"name": database_name, "engine": database_engine}, "tables": tables, "types": types}, warnings
+
+
+def _generate_batch(
+    project: Any,
+    generator_name: str,
+    model: str,
+    source_url: str,
+    batch: list[str],
+    invoker: Callable[..., Any],
+    max_attempts: int = 3,
+) -> dict[str, Any]:
+    last_error: Exception | None = None
+    for _ in range(max(1, max_attempts)):
+        try:
+            return validate_schema(
+                invoker(project, generator_name, model, {"sourceUrl": source_url, "sourceFiles": batch}, max_attempts=1)
+            )
+        except Exception as error:
+            last_error = error
+    assert last_error is not None
+    raise last_error
+
+
 def _publisher_payload(request: dict[str, Any], schema: dict[str, Any]) -> dict[str, Any]:
     _, source_repository, _ = parse_source_url(request["sourceUrl"])
     target_directory = request.get("targetDirectory", f"{source_repository}/db-schema")
@@ -189,15 +243,37 @@ def run_workflow(
     publisher_name: str,
     model: str,
     max_files: int = 100,
+    generator_batch_size: int = 5,
     invoker: Callable[..., Any] = invoke_agent,
 ) -> dict[str, Any]:
     request = parse_workflow_request(json.dumps(request))
     source_url = request["sourceUrl"]
+    batch_errors: list[dict[str, Any]] = []
     try:
         discovery = invoker(project, discovery_name, model, {"sourceUrl": source_url})
         discovered = validate_discovery_output(discovery, source_url, max_files)
-        generated = invoker(project, generator_name, model, {"sourceUrl": source_url, "sourceFiles": discovered["schemaFiles"]})
-        schema = validate_schema(generated)
+        schema_files = discovered["schemaFiles"]
+        batches = [
+            schema_files[index : index + generator_batch_size]
+            for index in range(0, len(schema_files), generator_batch_size)
+        ]
+        batch_schemas = []
+        for batch in batches:
+            try:
+                batch_schemas.append(_generate_batch(project, generator_name, model, source_url, batch, invoker))
+            except Exception as error:
+                batch_errors.append(
+                    {
+                        "sourceUrl": source_url,
+                        "files": batch,
+                        "errorType": type(error).__name__,
+                        "message": str(error)[:300],
+                    }
+                )
+        if not batch_schemas:
+            raise WorkflowError("generation_failed", "No batch of source files produced a valid schema.")
+        schema, merge_warnings = merge_schemas(batch_schemas)
+        batch_errors.extend(merge_warnings)
     except Exception as error:
         return {
             "success": False,
@@ -205,9 +281,8 @@ def run_workflow(
             "generatedSchemaCount": 0,
             "discoveredFileCount": 0,
             "excludedFileCount": 0,
-            "generationErrors": [
-                {"sourceUrl": source_url, "errorType": type(error).__name__, "message": str(error)[:300]}
-            ],
+            "generationErrors": batch_errors
+            or [{"sourceUrl": source_url, "errorType": type(error).__name__, "message": str(error)[:300]}],
             "schemas": [],
             "pullRequest": None,
             "errors": [{"code": "generation_failed", "message": "The database schema was not generated."}],
@@ -221,7 +296,7 @@ def run_workflow(
             "generatedSchemaCount": 1,
             "discoveredFileCount": len(discovered["schemaFiles"]),
             "excludedFileCount": len(discovered["excludedFiles"]),
-            "generationErrors": [],
+            "generationErrors": batch_errors,
             "schemas": schemas,
             "pullRequest": None,
             "errors": [],
@@ -242,7 +317,7 @@ def run_workflow(
         "generatedSchemaCount": 1,
         "discoveredFileCount": len(discovered["schemaFiles"]),
         "excludedFileCount": len(discovered["excludedFiles"]),
-        "generationErrors": [],
+        "generationErrors": batch_errors,
         "schemas": schemas,
         "pullRequest": publication,
         "errors": [],

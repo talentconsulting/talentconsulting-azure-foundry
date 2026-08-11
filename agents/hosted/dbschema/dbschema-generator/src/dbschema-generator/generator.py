@@ -27,12 +27,12 @@ SUPPORTED_EXTENSIONS = {
 IGNORED_PARTS = {
     ".git", ".github", ".idea", ".vs", ".vscode", "bin", "build", "dist",
     "node_modules", "obj", "packages", "test", "tests", "unittests",
-    "integrationtests", "acceptancetests", "testharness", "fakeservers",
-    "adhocscripts",
+    "integrationtests", "acceptancetests", "regressiontests", "regression",
+    "testharness", "fakeservers", "adhocscripts",
 }
 IGNORED_SUFFIXES = (
     ".tests", ".unittests", ".integrationtests", ".acceptancetests",
-    ".testharness", ".fakeservers",
+    ".regressiontests", ".testharness", ".fakeservers",
 )
 DATABASE_PATH_PARTS = {
     "data", "database", "db", "entities", "entity", "migrations", "models",
@@ -82,9 +82,11 @@ targetColumns, onDelete. Relationship type must be one-to-one, one-to-many, many
 many-to-many. Each index must contain exactly name, type, columns, unique, filter; type is the
 evidenced index method such as btree, hash, gin, or gist and is null when unknown. types contains evidenced
 enum, domain, composite, or other named database types; each item contains exactly name, kind,
-values. Defaults are SQL expressions: return them as strings (including numeric and Boolean literals,
-for example "0" and "false"). Use null for unknown scalar details and empty arrays only when no
-evidenced items exist.
+values. kind must be exactly one of enum, domain, composite, or other -- never any other word.
+Table-valued, structured, or row types (for example SQL Server's CREATE TYPE ... AS TABLE) are not
+tables; record them under types with kind "other" and list their column names as values. Defaults
+are SQL expressions: return them as strings (including numeric and Boolean literals, for example "0"
+and "false"). Use null for unknown scalar details and empty arrays only when no evidenced items exist.
 """
 
 
@@ -339,8 +341,8 @@ def validate_database_schema(document: object) -> dict[str, object]:
     _nullable_string(database["engine"], "database.engine")
 
     tables = document["tables"]
-    if not isinstance(tables, list) or not tables:
-        raise GenerationError("invalid_model_output", "tables must be a non-empty array.")
+    if not isinstance(tables, list):
+        raise GenerationError("invalid_model_output", "tables must be an array.")
     table_names: set[tuple[object, object]] = set()
     for table_index, table in enumerate(tables):
         label = f"tables[{table_index}]"

@@ -357,7 +357,12 @@ def run_manifest(
                 raise ManifestError("too_many_schemas", f"A run may publish at most {max_schemas} database schemas.")
             combined_schemas.extend(schemas)
             updated_manifest[entry.index][entry.manifest_node]["last-commit-hash-scanned"] = commit
-            generated_repositories.append({"repository": entry.repository_name, "commit": commit})
+            warnings = [
+                {"errorType": warning.get("errorType", "GenerationWarning"), "message": str(warning.get("message", ""))[:300]}
+                for warning in (workflow_result.get("generationErrors") or [])
+                if isinstance(warning, dict)
+            ]
+            generated_repositories.append({"repository": entry.repository_name, "commit": commit, "warnings": warnings})
         except Exception as error:
             failures.append(
                 {

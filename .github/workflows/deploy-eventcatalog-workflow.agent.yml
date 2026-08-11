@@ -1,0 +1,124 @@
+name: Deploy Event and Command Catalog Workflow
+
+on:
+  push:
+    paths:
+      - "agents/hosted/eventcatalog/eventcatalog-workflow/**"
+      - ".github/workflows/deploy-eventcatalog-workflow.agent.yml"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: eventcatalog-workflow-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-and-test:
+    if: github.event_name != 'push' || github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      AGENT_PROJECT_DIR: agents/hosted/eventcatalog/eventcatalog-workflow
+      AZD_ENV_NAME: ci
+      AZURE_DEV_USER_AGENT: microsoft_foundry_skill
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_AI_PROJECT_ENDPOINT: ${{ secrets.AZURE_AI_PROJECT_ENDPOINT }}
+      AZURE_AI_MODEL_DEPLOYMENT_NAME: ${{ vars.AZURE_AI_MODEL_DEPLOYMENT_NAME || 'gpt-4o' }}
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION || 'uksouth' }}
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'talent-day-rg' }}
+      AZURE_AI_ACCOUNT_NAME: ${{ vars.AZURE_AI_ACCOUNT_NAME || 'talent-day-foundry' }}
+      AZURE_AI_PROJECT_NAME: ${{ vars.AZURE_AI_PROJECT_NAME || 'talent-day-proj-default' }}
+      EVENTCATALOG_DISCOVERY_AGENT_NAME: eventcatalog-source-discovery
+      EVENTCATALOG_DISCOVERY_MAX_FILES: 100
+      EVENTCATALOG_GENERATOR_AGENT_NAME: eventcatalog-generator
+      EVENTCATALOG_GENERATOR_BATCH_SIZE: 10
+      EVENTCATALOG_PR_CREATOR_AGENT_NAME: eventcatalog-pr-creator
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID AZURE_AI_PROJECT_ENDPOINT; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing dev environment secret $name."
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: Azure/setup-azd@v2
+
+      - name: Install Foundry extensions
+        working-directory: ${{ env.AGENT_PROJECT_DIR }}
+        run: |
+          azd extension install azure.ai.agents
+          azd extension install azure.ai.projects
+          azd extension install microsoft.foundry
+
+      - name: Configure azd authentication
+        run: |
+          azd config set auth.useAzCliAuth true
+          azd config set defaults.subscription "$AZURE_SUBSCRIPTION_ID"
+
+      - name: Configure existing Foundry project
+        working-directory: ${{ env.AGENT_PROJECT_DIR }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          project_id="/subscriptions/$AZURE_SUBSCRIPTION_ID/resourceGroups/$AZURE_RESOURCE_GROUP/providers/Microsoft.CognitiveServices/accounts/$AZURE_AI_ACCOUNT_NAME/projects/$AZURE_AI_PROJECT_NAME"
+          azd env select "$AZD_ENV_NAME" || azd env new "$AZD_ENV_NAME" --no-prompt
+          azd env set AZURE_SUBSCRIPTION_ID "$AZURE_SUBSCRIPTION_ID"
+          azd env set AZURE_TENANT_ID "$AZURE_TENANT_ID"
+          azd env set AZURE_LOCATION "$AZURE_LOCATION"
+          azd env set AZURE_RESOURCE_GROUP "$AZURE_RESOURCE_GROUP"
+          azd env set AZURE_AI_ACCOUNT_NAME "$AZURE_AI_ACCOUNT_NAME"
+          azd env set AZURE_AI_PROJECT_NAME "$AZURE_AI_PROJECT_NAME"
+          azd env set AZURE_AI_PROJECT_ID "$project_id"
+          azd env set AZURE_AI_PROJECT_ENDPOINT "$AZURE_AI_PROJECT_ENDPOINT"
+          azd env set FOUNDRY_PROJECT_ENDPOINT "$AZURE_AI_PROJECT_ENDPOINT"
+          azd env set AZURE_AI_MODEL_DEPLOYMENT_NAME "$AZURE_AI_MODEL_DEPLOYMENT_NAME"
+          azd env set EVENTCATALOG_DISCOVERY_AGENT_NAME "$EVENTCATALOG_DISCOVERY_AGENT_NAME"
+          azd env set EVENTCATALOG_DISCOVERY_MAX_FILES "$EVENTCATALOG_DISCOVERY_MAX_FILES"
+          azd env set EVENTCATALOG_GENERATOR_AGENT_NAME "$EVENTCATALOG_GENERATOR_AGENT_NAME"
+          azd env set EVENTCATALOG_GENERATOR_BATCH_SIZE "$EVENTCATALOG_GENERATOR_BATCH_SIZE"
+          azd env set EVENTCATALOG_PR_CREATOR_AGENT_NAME "$EVENTCATALOG_PR_CREATOR_AGENT_NAME"
+          azd env set USE_EXISTING_AI_PROJECT true
+          azd env set ENABLE_HOSTED_AGENTS true
+          azd env set ENABLE_CAPABILITY_HOST false
+
+      - name: Run unit tests
+        working-directory: ${{ env.AGENT_PROJECT_DIR }}
+        run: python3 -m unittest discover -s src/eventcatalog-workflow -p 'test_*.py'
+
+      - name: Deploy Event and Command Catalog Workflow
+        working-directory: ${{ env.AGENT_PROJECT_DIR }}
+        run: azd deploy eventcatalog-workflow --no-prompt
+
+      - name: Verify deployed agent
+        working-directory: ${{ env.AGENT_PROJECT_DIR }}
+        run: azd ai agent show eventcatalog-workflow --output json --no-prompt
+
+      - name: Smoke test validation without calling dependencies
+        working-directory: ${{ env.AGENT_PROJECT_DIR }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          response_file="$RUNNER_TEMP/eventcatalog-workflow-response.txt"
+          azd ai agent invoke eventcatalog-workflow '{}' > "$response_file" 2>&1
+          cat "$response_file"
+          grep -q '"success":false' "$response_file"
+          grep -q '"invalid_source_url"' "$response_file"

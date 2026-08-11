@@ -1,0 +1,19 @@
+name: Deploy Service Dependency PR Creator
+
+on:
+  push:
+    paths:
+      - "agents/hosted/servicedependencies/service-dependency-pr-creator/**"
+      - ".github/workflows/deploy-service-dependency-pr-creator.agent.yml"
+      - ".github/workflows/deploy-service-dependency-agent.reusable.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    if: github.event_name != 'push' || github.ref_name == github.event.repository.default_branch
+    uses: ./.github/workflows/deploy-service-dependency-agent.reusable.yml
+    with:
+      project_dir: agents/hosted/servicedependencies/service-dependency-pr-creator
+      service_name: service-dependency-pr-creator
+      expected_marker: invalid_repository
+    secrets: inherit

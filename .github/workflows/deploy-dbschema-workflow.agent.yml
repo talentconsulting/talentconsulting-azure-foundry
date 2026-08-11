@@ -32,7 +32,10 @@ jobs:
       AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'talent-day-rg' }}
       AZURE_AI_ACCOUNT_NAME: ${{ vars.AZURE_AI_ACCOUNT_NAME || 'talent-day-foundry' }}
       AZURE_AI_PROJECT_NAME: ${{ vars.AZURE_AI_PROJECT_NAME || 'talent-day-proj-default' }}
+      DBSCHEMA_DISCOVERY_AGENT_NAME: dbschema-source-discovery
+      DBSCHEMA_DISCOVERY_MAX_FILES: 100
       DBSCHEMA_GENERATOR_AGENT_NAME: dbschema-generator
+      DBSCHEMA_GENERATOR_BATCH_SIZE: 5
       DBSCHEMA_PR_CREATOR_AGENT_NAME: dbschema-pr-creator
     steps:
       - uses: actions/checkout@v4
@@ -87,7 +90,10 @@ jobs:
           azd env set AZURE_AI_PROJECT_ENDPOINT "$AZURE_AI_PROJECT_ENDPOINT"
           azd env set FOUNDRY_PROJECT_ENDPOINT "$AZURE_AI_PROJECT_ENDPOINT"
           azd env set AZURE_AI_MODEL_DEPLOYMENT_NAME "$AZURE_AI_MODEL_DEPLOYMENT_NAME"
+          azd env set DBSCHEMA_DISCOVERY_AGENT_NAME "$DBSCHEMA_DISCOVERY_AGENT_NAME"
+          azd env set DBSCHEMA_DISCOVERY_MAX_FILES "$DBSCHEMA_DISCOVERY_MAX_FILES"
           azd env set DBSCHEMA_GENERATOR_AGENT_NAME "$DBSCHEMA_GENERATOR_AGENT_NAME"
+          azd env set DBSCHEMA_GENERATOR_BATCH_SIZE "$DBSCHEMA_GENERATOR_BATCH_SIZE"
           azd env set DBSCHEMA_PR_CREATOR_AGENT_NAME "$DBSCHEMA_PR_CREATOR_AGENT_NAME"
           azd env set USE_EXISTING_AI_PROJECT true
           azd env set ENABLE_HOSTED_AGENTS true

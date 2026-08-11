@@ -110,10 +110,18 @@ class DiscoveryTests(unittest.TestCase):
             _is_ignored("src/Catalog.Database/AdhocScripts/Manual/data-backfill.sql")
         )
 
+    def test_ignores_regression_test_directories_and_projects(self):
+        self.assertTrue(_is_ignored("src/Database/RegressionTests/OrderRegression.cs"))
+        self.assertTrue(_is_ignored("src/Database.RegressionTests/OrderRegression.cs"))
+
 
 class SchemaTests(unittest.TestCase):
     def test_validates_complete_database_representation(self):
         self.assertEqual(SCHEMA, validate_database_schema(SCHEMA))
+
+    def test_accepts_a_types_only_batch_with_no_tables(self):
+        types_only = {"database": {"name": None, "engine": None}, "tables": [], "types": SCHEMA["types"]}
+        self.assertEqual(types_only, validate_database_schema(types_only))
 
     def test_rejects_missing_table_contract_fields(self):
         invalid = json.loads(json.dumps(SCHEMA))

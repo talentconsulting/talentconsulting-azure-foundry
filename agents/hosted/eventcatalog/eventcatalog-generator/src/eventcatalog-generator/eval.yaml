@@ -1,0 +1,8 @@
+name: smoke-core
+agent:
+    name: eventcatalog-generator
+    kind: hosted
+    config: .agent_configs/baseline/metadata.yaml
+options:
+    eval_model: gpt-4o
+max_samples: 15
