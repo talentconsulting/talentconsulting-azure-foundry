@@ -1,6 +1,6 @@
 # Source Control Agent Pipelines
 
-This repository contains Azure AI Foundry hosted agents for manifest-driven source analysis. The OpenAPI, database-schema, event/command-catalog, and external-service-dependency pipelines generate repository artefacts and create one combined pull request for all successful manifest entries.
+This repository contains Azure AI Foundry hosted agents for manifest-driven source analysis. The OpenAPI, database-schema, event/command-catalog, external-service-dependency, and C4 pipelines generate repository artefacts and create one combined pull request for all successful manifest entries.
 
 ## Pipeline
 
@@ -69,6 +69,9 @@ The dependency order is:
 - `service-dependency-source-discovery`, `service-dependency-generator`, and `service-dependency-pr-creator` are leaf agents.
 - `service-dependency-workflow` depends on those three leaf agents.
 - `service-dependency-manifest-orchestrator` depends on `service-dependency-workflow` and `service-dependency-pr-creator`.
+- `c4-source-discovery`, `c4-generator`, and `c4-pr-creator` are leaf agents.
+- `c4-workflow` depends on those three leaf agents.
+- `c4-manifest-orchestrator` depends on `c4-workflow` and `c4-pr-creator`.
 
 Previous workflows, scripts, prompt agents, and documentation are retained under [`backup/`](backup/).
 
@@ -88,6 +91,20 @@ Previous workflows, scripts, prompt agents, and documentation are retained under
 {
   "github-repo": "https://github.com/owner/application",
   "service-dependencies": {
+    "path-to-scan": "tree/main/src",
+    "last-commit-hash-scanned": ""
+  }
+}
+```
+
+## C4 orchestration
+
+[`c4-source-discovery`](agents/hosted/c4/c4-source-discovery/README.md) deterministically selects source, configuration, dependency, and infrastructure files that can evidence C4 context and container diagrams. [`c4-generator`](agents/hosted/c4/c4-generator/README.md) extracts a validated C4 model and draw.io `mxfile` XML for `context.drawio` and `container.drawio`. [`c4-workflow`](agents/hosted/c4/c4-workflow/README.md) writes one `<repository>/c4/` directory through [`c4-pr-creator`](agents/hosted/c4/c4-pr-creator/README.md), while [`c4-manifest-orchestrator`](agents/hosted/c4/c4-manifest-orchestrator/README.md) processes only `c4` nodes and combines changed repositories with the manifest update in one PR.
+
+```json
+{
+  "github-repo": "https://github.com/owner/application",
+  "c4": {
     "path-to-scan": "tree/main/src",
     "last-commit-hash-scanned": ""
   }
@@ -190,6 +207,25 @@ cd ../service-dependency-manifest-orchestrator
 azd deploy service-dependency-manifest-orchestrator --no-prompt
 ```
 
+The C4 agents use the same dependency order:
+
+```bash
+cd agents/hosted/c4/c4-source-discovery
+azd deploy c4-source-discovery --no-prompt
+
+cd ../c4-generator
+azd deploy c4-generator --no-prompt
+
+cd ../c4-pr-creator
+azd deploy c4-pr-creator --no-prompt
+
+cd ../c4-workflow
+azd deploy c4-workflow --no-prompt
+
+cd ../c4-manifest-orchestrator
+azd deploy c4-manifest-orchestrator --no-prompt
+```
+
 ## Test
 
 ```bash
@@ -212,4 +248,9 @@ python3 -m unittest discover -s agents/hosted/servicedependencies/service-depend
 python3 -m unittest discover -s agents/hosted/servicedependencies/service-dependency-pr-creator/src/service-dependency-pr-creator -p 'test_*.py'
 python3 -m unittest discover -s agents/hosted/servicedependencies/service-dependency-workflow/src/service-dependency-workflow -p 'test_*.py'
 python3 -m unittest discover -s agents/hosted/servicedependencies/service-dependency-manifest-orchestrator/src/service-dependency-manifest-orchestrator -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/c4/c4-source-discovery/src/c4-source-discovery -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/c4/c4-generator/src/c4-generator -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/c4/c4-pr-creator/src/c4-pr-creator -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/c4/c4-workflow/src/c4-workflow -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/c4/c4-manifest-orchestrator/src/c4-manifest-orchestrator -p 'test_*.py'
 ```
