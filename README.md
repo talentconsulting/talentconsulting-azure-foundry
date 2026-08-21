@@ -2,6 +2,34 @@
 
 This repository contains Azure AI Foundry hosted agents for manifest-driven source analysis. The OpenAPI, database-schema, event/command-catalog, external-service-dependency, and C4 pipelines generate repository artefacts and create one combined pull request for all successful manifest entries.
 
+## Pattern
+
+Every pipeline in this repository follows the same shape: an orchestrator fetches the manifest from `service-catalogue-data`, then for each manifest entry a discovery agent retrieves the relevant files from the repository being analyzed and a generator agent turns them into structured artifacts, looping until every entry has been processed. Once the loop completes, one PR-creator agent commits every generated artifact back into `service-catalogue-data` in a single pull request.
+
+```mermaid
+flowchart TD
+    orchestrator[Orchestrator] -->|FetchManifest| manifestRepo[(service-catalogue-data)]
+    orchestrator --> loop
+
+    subgraph workflow[Workflow]
+        direction TB
+        loop[Foreach manifest entry]
+        retrieve["Retrieve files for processing (Agent)"]
+        create["Create artifacts (Agent)"]
+        more{More entries?}
+
+        loop --> retrieve
+        retrieve -->|JSON| create
+        create -->|JSON| more
+        more -->|yes| loop
+    end
+
+    retrieve --> targetRepo[(Repository to act on)]
+    create --> targetRepo
+    more -->|no| createPR["Create PR (Agent)"]
+    createPR --> manifestRepo
+```
+
 ## Pipeline
 
 1. [`openapi-source-discovery`](agents/hosted/openapi/openapi-source-discovery/README.md) scans one GitHub repository path and returns a root JSON array of `{apiFile, supportingFiles}` objects.
