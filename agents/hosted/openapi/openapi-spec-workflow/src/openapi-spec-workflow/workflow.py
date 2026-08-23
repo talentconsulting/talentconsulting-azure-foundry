@@ -211,14 +211,18 @@ def run_workflow(
     discovery = invoker(project, discovery_name, model, {"sourceUrl": request["sourceUrl"]})
     api_files = validate_discovery_output(discovery, request["sourceUrl"], max_files)
     if not api_files:
+        # No candidate controller files means there is no REST API surface to document -- a
+        # legitimate, stable result, not a failure. Report success with nothing generated so the
+        # manifest's commit hash advances instead of rescanning this repository forever.
         return {
-            "success": False,
+            "success": True,
             "sourceUrl": request["sourceUrl"],
             "discoveredCount": 0,
             "generatedCount": 0,
             "generationErrors": [],
+            "specifications": [],
             "pullRequest": None,
-            "errors": [{"code": "no_api_files", "message": "No API files were discovered."}],
+            "errors": [],
         }
 
     generated: list[dict[str, Any] | None] = [None] * len(api_files)

@@ -100,7 +100,21 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual([], result["catalogs"])
         self.assertFalse(publisher_called)
 
-    def test_empty_catalog_fails(self):
+    def test_discovery_finding_no_files_succeeds_with_an_empty_catalog(self):
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "discovery":
+                return {"sourceFiles": [], "excludedFiles": []}
+            raise AssertionError("The generator must not be called when discovery finds nothing.")
+
+        result = run_workflow(
+            object(), {"sourceUrl": SOURCE, "deferPublication": True},
+            "discovery", "generator", "publisher", "gpt-4o", invoker=invoke,
+        )
+        self.assertTrue(result["success"])
+        self.assertEqual(0, result["discoveredFileCount"])
+        self.assertEqual([], result["catalogs"][0]["catalog"]["dependencies"])
+
+    def test_a_legitimately_empty_generated_catalog_still_succeeds(self):
         def invoke(project, name, model, payload, max_attempts=2):
             if name == "discovery":
                 return {"sourceFiles": FILES[:1], "excludedFiles": []}
@@ -110,8 +124,8 @@ class WorkflowTests(unittest.TestCase):
             object(), {"sourceUrl": SOURCE, "deferPublication": True},
             "discovery", "generator", "publisher", "gpt-4o", invoker=invoke,
         )
-        self.assertFalse(result["success"])
-        self.assertEqual("no_dependencies_found", result["errors"][0]["code"])
+        self.assertTrue(result["success"])
+        self.assertEqual([], result["catalogs"][0]["catalog"]["dependencies"])
 
     def test_direct_workflow_publishes_deterministic_path(self):
         def invoke(project, name, model, payload, max_attempts=2):

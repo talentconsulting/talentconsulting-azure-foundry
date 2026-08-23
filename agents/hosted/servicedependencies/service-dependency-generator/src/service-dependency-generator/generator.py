@@ -43,6 +43,15 @@ code, client registration, or endpoint configuration in the supplied files. Do n
 DbContext classes, message brokers, caches, object storage, cloud resources, package/library dependencies,
 the repository's own inbound API, ordinary domain services, local files, or in-process components.
 
+When a file registers dependency injection services (for example AddHttpClient, AddTransient, AddScoped,
+AddSingleton, or a custom factory registration), treat every distinctly named client or API interface
+registered in that file as a separate, independent dependency to evidence. Do not stop scanning a
+registration file after finding one match, and do not use it only to confirm or name a dependency you
+already found elsewhere. A single registration file commonly wires up several unrelated clients alongside
+ordinary domain services in the same block of code; enumerate each client-shaped registration (interface
+and implementation names ending in Client, ApiClient, or similar) individually, even when only one of them
+has additional evidence -- such as manual HttpClient construction -- elsewhere in the supplied bundle.
+
 Never return credentials, tokens, API keys, connection-string values, literal endpoint hostnames, or
 other secret/configuration values. Return configuration key names only. Operation paths must be relative
 paths or route templates and must not contain a scheme or hostname. When a service cannot be named from

@@ -119,6 +119,36 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(1, result["generatedRepositoryCount"])
         self.assertEqual(["workflow", "publisher"], [call[0] for call in calls])
 
+    def test_a_repository_with_no_api_files_still_advances_and_counts_as_generated(self):
+        second = manifest()
+        second[0]["github-repo"] = "https://github.com/source/events-only"
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "workflow":
+                if payload["sourceUrl"].startswith("https://github.com/source/events-only"):
+                    return {"success": True, "specifications": []}
+                return {"success": True, "specifications": [{"apiFile": API_FILE, "specification": SPEC}]}
+            self.assertEqual("publisher", name)
+            self.assertEqual(1, len(payload["specifications"]))
+            for node in payload["manifestFile"]["content"]:
+                self.assertEqual(NEW_SHA, node["specs"]["last-commit-hash-scanned"])
+            return {"success": True, "status": "created", "pullRequestUrl": "https://github.com/target/specs/pull/2"}
+
+        result = run_manifest(
+            object(),
+            {"sourceUrl": MANIFEST_URL},
+            "workflow",
+            "publisher",
+            "gpt-4o",
+            manifest_loader=lambda blob: manifest() + second,
+            commit_resolver=lambda entry: NEW_SHA,
+            invoker=invoke,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(2, result["generatedRepositoryCount"])
+        self.assertEqual(1, result["generatedSpecCount"])
+
     def test_generation_failure_does_not_update_or_publish(self):
         def invoke(project, name, model, payload, max_attempts=2):
             return {"success": False, "generationErrors": [{"apiFile": API_FILE}]}

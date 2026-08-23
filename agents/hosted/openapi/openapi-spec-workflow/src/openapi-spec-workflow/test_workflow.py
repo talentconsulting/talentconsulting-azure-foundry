@@ -108,7 +108,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(1, result["generatedCount"])
         self.assertEqual(API_2, result["generationErrors"][0]["apiFile"])
 
-    def test_empty_discovery_does_not_call_publisher(self):
+    def test_empty_discovery_succeeds_without_calling_the_publisher(self):
         def invoke(project, name, model, payload, max_attempts=2):
             self.assertEqual("discovery", name)
             return []
@@ -122,7 +122,10 @@ class WorkflowTests(unittest.TestCase):
             "gpt-4o",
             invoker=invoke,
         )
-        self.assertEqual("no_api_files", result["errors"][0]["code"])
+        self.assertTrue(result["success"])
+        self.assertEqual(0, result["discoveredCount"])
+        self.assertEqual([], result["specifications"])
+        self.assertIsNone(result["pullRequest"])
 
     def test_can_defer_publication_and_return_generated_specifications(self):
         calls = []

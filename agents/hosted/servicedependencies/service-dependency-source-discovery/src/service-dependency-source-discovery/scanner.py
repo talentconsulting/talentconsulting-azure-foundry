@@ -23,7 +23,15 @@ SUPPORTED_EXTENSIONS = {
 IGNORED_PARTS = {
     ".git", ".github", ".idea", ".vs", ".vscode", "bin", "build", "coverage", "dist", "fixtures",
     "mocks", "node_modules", "obj", "packages", "snapshots", "test", "tests", "testdata", "unittests",
+    "integrationtests", "acceptancetests", "regressiontests", "regression", "testharness", "fakeservers",
 }
+# .NET test projects are conventionally folders named after their namespace (e.g.
+# "SFA.DAS.CommitmentsV2.UnitTests"), so the whole path segment never equals a bare keyword like
+# "unittests" above -- match on the dotted suffix instead.
+IGNORED_SUFFIXES = (
+    ".tests", ".unittests", ".integrationtests", ".acceptancetests", ".regressiontests",
+    ".testharness", ".fakeservers",
+)
 CONFIG_NAMES = {
     "app.config", "appsettings.json", "appsettings.development.json", "application.json", "application.yml",
     "application.yaml", "config.json", "local.settings.json", "settings.json", "web.config",
@@ -37,6 +45,27 @@ API_INTEGRATION_RE = re.compile(
 PROTO_SERVICE_RE = re.compile(r"\b(?:service|rpc)\s+[A-Za-z_]\w*", re.IGNORECASE)
 REGISTRATION_RE = re.compile(
     r"\b(?:AddHttpClient|AddRefitClient|AddGrpcClient|Register.*(?:Api)?Client)\b",
+    re.IGNORECASE,
+)
+# A generic DI registration (AddTransient/AddScoped/AddSingleton<TInterface, TImplementation>) counts
+# as a client registration only when both type names follow the "...Client" naming convention -- this
+# catches bulk ServiceRegistrations-style files that wire up an API client without AddHttpClient (e.g.
+# `AddTransient<IReservationsOuterApiClient, ReservationsOuterApiClient>()`) while still excluding the
+# many unrelated domain-service registrations (`AddScoped<IProviderService, ProviderService>()`) that
+# typically sit right next to them in the same file.
+GENERIC_CLIENT_REGISTRATION_RE = re.compile(
+    r"\bAdd(?:Transient|Scoped|Singleton)\s*<\s*I?\w*(?:Api)?Client\s*,\s*\w*(?:Api)?Client\s*>",
+    re.IGNORECASE,
+)
+# Evidence that an HTTP/gRPC client is actually being built or configured, for codebases that wire
+# clients by hand (a factory calling `new HttpClient()`, `IHttpClientFactory.CreateClient(...)`,
+# explicit `.BaseAddress =`) instead of the standard DI extension methods above. Deliberately narrower
+# than mere usage (e.g. a controller just calling a method on an already-injected client) -- this only
+# matches the site where the client itself comes into existence.
+CLIENT_CONSTRUCTION_RE = re.compile(
+    r"\b(?:new\s+HttpClient\s*\(|CreateHttpClient\s*\(|IHttpClientFactory\b|\.BaseAddress\s*=|"
+    r"new\s+GrpcChannel|ChannelForAddress\s*\(|new\s+RestClient\s*\(|axios\.create\s*\(|"
+    r"requests\.Session\s*\(|httpx\.Client\s*\()",
     re.IGNORECASE,
 )
 
@@ -73,7 +102,8 @@ def parse_source_url(value: str) -> SourceLocation:
 
 
 def _ignored(path: str) -> bool:
-    return bool({part.lower() for part in path.split("/")} & IGNORED_PARTS)
+    parts = {part.lower() for part in path.split("/")}
+    return bool(parts & IGNORED_PARTS) or any(part.endswith(IGNORED_SUFFIXES) for part in parts)
 
 
 def _under_base(path: str, base: str) -> bool:
@@ -87,7 +117,11 @@ def _supported(path: str) -> bool:
 def _candidate(path: str, content: str) -> bool:
     lowered = path.lower()
     filename = lowered.rsplit("/", 1)[-1]
-    is_registration = bool(REGISTRATION_RE.search(content))
+    is_registration = (
+        bool(REGISTRATION_RE.search(content))
+        or bool(CLIENT_CONSTRUCTION_RE.search(content))
+        or bool(GENERIC_CLIENT_REGISTRATION_RE.search(content))
+    )
     is_proto_service = lowered.endswith(".proto") and bool(PROTO_SERVICE_RE.search(content))
     is_api_configuration = filename in CONFIG_NAMES and bool(API_INTEGRATION_RE.search(content))
     return is_registration or is_proto_service or is_api_configuration
@@ -96,7 +130,12 @@ def _candidate(path: str, content: str) -> bool:
 def _priority(path: str, content: str) -> tuple[int, str]:
     lowered = path.lower()
     filename = lowered.rsplit("/", 1)[-1]
-    if REGISTRATION_RE.search(content) or filename in CONFIG_NAMES:
+    if (
+        REGISTRATION_RE.search(content)
+        or CLIENT_CONSTRUCTION_RE.search(content)
+        or GENERIC_CLIENT_REGISTRATION_RE.search(content)
+        or filename in CONFIG_NAMES
+    ):
         return (0, lowered)
     if filename.rsplit(".", 1)[0].endswith(("client", "connector", "gateway", "producer", "consumer")):
         return (1, lowered)

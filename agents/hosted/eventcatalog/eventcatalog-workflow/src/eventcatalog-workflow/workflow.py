@@ -193,8 +193,17 @@ def merge_catalogs(catalogs: list[dict[str, Any]]) -> tuple[dict[str, Any], list
                 candidate_source = str(message.get("sourceFile") or "")
                 if candidate_is_declaration:
                     if existing_is_declaration and candidate_source != existing_source:
-                        raise WorkflowError("conflicting_message", f"Generator returned conflicting source files for {identity[2]!r}.")
-                    existing["sourceFile"] = candidate_source
+                        warnings.append(
+                            {
+                                "errorType": "ConflictingSourceFile",
+                                "message": (
+                                    f"Generator returned conflicting source files for {identity[2]!r} "
+                                    f"({existing_source!r} vs {candidate_source!r}); kept the first occurrence."
+                                ),
+                            }
+                        )
+                    else:
+                        existing["sourceFile"] = candidate_source
                 elif not existing_is_declaration:
                     existing["sourceFile"] = min(existing_source, candidate_source)
                 fields = {field["name"]: field for field in existing.get("fields", [])}

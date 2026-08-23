@@ -272,8 +272,8 @@ def _validate_deferred_output(value: Any, entry: ManifestEntry) -> list[dict[str
             message = f"{message} {len(errors)} generation error(s)."
         raise ManifestError("spec_generation_failed", message)
     specifications = value.get("specifications")
-    if not isinstance(specifications, list) or not specifications:
-        raise ManifestError("invalid_workflow_output", "Spec workflow returned no specifications.")
+    if not isinstance(specifications, list):
+        raise ManifestError("invalid_workflow_output", "Spec workflow returned an invalid specifications field.")
     result = []
     for item in specifications:
         if not isinstance(item, dict) or set(item) != {"apiFile", "specification"}:

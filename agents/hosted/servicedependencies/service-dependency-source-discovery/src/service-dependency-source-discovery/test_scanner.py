@@ -48,6 +48,61 @@ class ScanTests(unittest.TestCase):
 
         self.assertEqual([], result["sourceFiles"])
 
+    def test_a_generic_di_registration_of_a_named_client_counts_as_a_registration(self):
+        result = scan(SOURCE, archive({
+            "src/AppStart/ServiceRegistrationExtension.cs": (
+                "services.AddScoped<IProviderPermissionsService, ProviderPermissionsService>(); "
+                "services.AddSingleton<IProviderService, ProviderService>(); "
+                "services.AddTransient<HttpClient>(); "
+                "services.AddTransient<IReservationsOuterApiClient, ReservationsOuterApiClient>(); "
+                "services.AddTransient<ICacheStorageService, CacheStorageService>();"
+            ),
+        }))
+
+        self.assertEqual(
+            ["https://github.com/source/app/blob/main/src/AppStart/ServiceRegistrationExtension.cs"],
+            result["sourceFiles"],
+        )
+
+    def test_a_file_registering_only_domain_services_is_not_selected(self):
+        result = scan(SOURCE, archive({
+            "src/AppStart/ServiceRegistrationExtension.cs": (
+                "services.AddScoped<IProviderPermissionsService, ProviderPermissionsService>(); "
+                "services.AddSingleton<IProviderService, ProviderService>(); "
+                "services.AddTransient<ICacheStorageService, CacheStorageService>();"
+            ),
+        }))
+
+        self.assertEqual([], result["sourceFiles"])
+
+    def test_a_hand_rolled_client_factory_is_a_registration_even_without_addhttpclient(self):
+        result = scan(SOURCE, archive({
+            "src/DependencyResolution/ServiceRegistrationExtensions.cs": (
+                "services.AddSingleton<IReservationsApiClient>(s => s.GetService<IReservationsApiClientFactory>().CreateClient());"
+            ),
+            "src/ReservationsApiClientFactory.cs": (
+                "public class ReservationsApiClientFactory : IReservationsApiClientFactory { "
+                "public IReservationsApiClient CreateClient() { "
+                "var httpClient = CreateHttpClient(); "
+                "return new ReservationsApiClient(httpClient); } "
+                "private HttpClient CreateHttpClient() { "
+                "var client = new HttpClient(); client.BaseAddress = new Uri(_configuration.ApiBaseUrl); return client; } }"
+            ),
+        }))
+
+        paths = result["sourceFiles"]
+        self.assertTrue(any(path.endswith("ReservationsApiClientFactory.cs") for path in paths))
+
+    def test_ignores_dotted_dotnet_test_project_folders(self):
+        result = scan(SOURCE, archive({
+            "src/CommitmentsV2/SFA.DAS.CommitmentsV2.UnitTests/Infrastructure/Api/WhenCallingPost.cs": (
+                'services.AddHttpClient<IApprovalsOuterApiClient, ApprovalsOuterApiClient>('
+                'c => c.BaseAddress = new Uri("https://approvals.example.invalid"));'
+            ),
+        }))
+
+        self.assertEqual([], result["sourceFiles"])
+
     def test_ignores_tests_and_files_outside_requested_tree(self):
         result = scan(SOURCE, archive({
             "src/Clients/BillingClient.cs": (

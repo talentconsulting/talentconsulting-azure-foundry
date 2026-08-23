@@ -28,7 +28,15 @@ SUPPORTED_FILENAMES = {
 IGNORED_PARTS = {
     ".git", ".github", ".idea", ".vs", ".vscode", "bin", "build", "coverage", "dist", "fixtures",
     "mocks", "node_modules", "obj", "packages", "snapshots", "test", "tests", "testdata", "unittests",
+    "integrationtests", "acceptancetests", "regressiontests", "regression", "testharness", "fakeservers",
 }
+# .NET test projects are conventionally folders named after their namespace (e.g.
+# "SFA.DAS.CommitmentsV2.UnitTests"), so the whole path segment never equals a bare keyword like
+# "unittests" above -- match on the dotted suffix instead.
+IGNORED_SUFFIXES = (
+    ".tests", ".unittests", ".integrationtests", ".acceptancetests", ".regressiontests",
+    ".testharness", ".fakeservers",
+)
 CONFIG_NAMES = {
     "app.config", "appsettings.json", "appsettings.development.json", "application.json", "application.yml",
     "application.yaml", "config.json", "local.settings.json", "settings.json", "web.config",
@@ -83,7 +91,8 @@ def parse_source_url(value: str) -> SourceLocation:
 
 
 def _ignored(path: str) -> bool:
-    return bool({part.lower() for part in path.split("/")} & IGNORED_PARTS)
+    parts = {part.lower() for part in path.split("/")}
+    return bool(parts & IGNORED_PARTS) or any(part.endswith(IGNORED_SUFFIXES) for part in parts)
 
 
 def _under_base(path: str, base: str) -> bool:

@@ -54,6 +54,13 @@ class ScanTests(unittest.TestCase):
 
         self.assertEqual(["https://github.com/source/app/blob/main/src/Program.cs"], result["sourceFiles"])
 
+    def test_ignores_dotted_dotnet_test_project_folders(self):
+        result = scan(SOURCE, archive({
+            "src/App.UnitTests/OrdersControllerTests.cs": "class OrdersControllerTests { Controller c; }",
+        }))
+
+        self.assertEqual([], result["sourceFiles"])
+
     def test_reports_oversized_candidate(self):
         result = scan(SOURCE, archive({
             "src/Program.cs": "WebApplication.CreateBuilder(args);" + "x" * (512 * 1024),

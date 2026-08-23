@@ -174,6 +174,19 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual("ConflictingField", warnings[0]["errorType"])
         self.assertIn("PeriodEndRef", warnings[0]["message"])
 
+    def test_merge_keeps_first_declaration_and_warns_on_conflicting_source_files(self):
+        first = message("FoundLevyPayerEmployerAccount")
+        first["sourceFile"] = "src/Events/FoundLevyPayerEmployerAccount.cs"
+        second = message("FoundLevyPayerEmployerAccount")
+        second["sourceFile"] = "src/FoundLevyPayerEmployerAccount.cs"
+
+        merged, warnings = merge_catalogs([catalog(events=[first]), catalog(events=[second])])
+
+        self.assertEqual(first["sourceFile"], merged["events"][0]["sourceFile"])
+        self.assertEqual(1, len(warnings))
+        self.assertEqual("ConflictingSourceFile", warnings[0]["errorType"])
+        self.assertIn("FoundLevyPayerEmployerAccount", warnings[0]["message"])
+
     def test_deferred_workflow_surfaces_merge_warnings_but_still_succeeds(self):
         first = message("ImportAccountPaymentMetadataCommand")
         first["fields"] = [{"name": "PeriodEndRef", "type": "string", "required": True, "description": None}]
