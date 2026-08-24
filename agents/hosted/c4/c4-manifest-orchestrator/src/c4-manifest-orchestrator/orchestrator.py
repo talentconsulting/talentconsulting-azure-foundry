@@ -188,7 +188,26 @@ def validate_manifest(value: object, max_entries: int) -> list[ManifestEntry]:
     return entries
 
 
+def _default_branch(entry: ManifestEntry) -> str:
+    endpoint = (
+        f"https://api.github.com/repos/{urllib.parse.quote(entry.owner, safe='')}/"
+        f"{urllib.parse.quote(entry.repository, safe='')}"
+    )
+    response = json.loads(_read_url(endpoint).decode("utf-8"))
+    branch = response.get("default_branch") if isinstance(response, dict) else None
+    if not isinstance(branch, str) or not branch:
+        raise ManifestError("github_api_error", f"GitHub did not report a default branch for {entry.repository_name}.")
+    return branch
+
+
 def latest_commit(entry: ManifestEntry) -> str:
+    default_branch = _default_branch(entry)
+    if entry.ref != default_branch:
+        raise ManifestError(
+            "invalid_manifest",
+            f"Manifest entry for {entry.repository_name} scans ref {entry.ref!r}, but the repository's "
+            f"default branch is {default_branch!r}. Only the default branch may be scanned.",
+        )
     endpoint = (
         f"https://api.github.com/repos/{urllib.parse.quote(entry.owner, safe='')}/"
         f"{urllib.parse.quote(entry.repository, safe='')}/commits/{urllib.parse.quote(entry.ref, safe='')}"

@@ -19,7 +19,10 @@ CATALOG = {
         "technology": "HttpClient",
         "configurationKeys": ["AccountsApi:BaseUrl"],
         "authentication": {"type": "oauth2", "configurationKeys": ["AccountsApi:Identifier"]},
-        "operations": [{"method": "GET", "path": "/accounts/{id}", "sourceFile": "src/Clients/AccountsClient.cs"}],
+        "operations": [{
+            "method": "GET", "methodName": "GetAccount", "path": "/accounts/{id}",
+            "sourceFile": "src/Clients/AccountsClient.cs",
+        }],
         "resources": [],
         "evidence": [{"sourceFile": "src/Clients/AccountsClient.cs", "reason": "Typed HTTP client registration."}],
         "confidence": "high",
@@ -50,6 +53,36 @@ class GeneratorTests(unittest.TestCase):
         bad["dependencies"][0]["evidence"][0]["sourceFile"] = "src/NotSupplied.cs"
         with self.assertRaisesRegex(GenerationError, "supplied source"):
             validate_catalog(bad, source_paths={"src/Clients/AccountsClient.cs"})
+
+    def test_operations_require_a_methodname_field(self):
+        bad = json.loads(json.dumps(CATALOG))
+        del bad["dependencies"][0]["operations"][0]["methodName"]
+        with self.assertRaisesRegex(GenerationError, "invalid shape"):
+            validate_catalog(bad, source_paths={"src/Clients/AccountsClient.cs"})
+
+    def test_operations_methodname_may_be_null(self):
+        catalog = json.loads(json.dumps(CATALOG))
+        catalog["dependencies"][0]["operations"][0]["methodName"] = None
+        result = validate_catalog(catalog, source_paths={"src/Clients/AccountsClient.cs"})
+        self.assertIsNone(result["dependencies"][0]["operations"][0]["methodName"])
+
+    def test_a_redis_cache_dependency_is_kept_in_the_output(self):
+        catalog = json.loads(json.dumps(CATALOG))
+        catalog["dependencies"].append({
+            "name": "Redis", "kind": "cache", "classification": "internal", "direction": "outbound",
+            "client": None, "technology": "StackExchange.Redis",
+            "configurationKeys": ["Redis:ConnectionString"],
+            "authentication": {"type": None, "configurationKeys": []},
+            "operations": [], "resources": [],
+            "evidence": [{
+                "sourceFile": "src/Clients/AccountsClient.cs",
+                "reason": "AddStackExchangeRedisCache registration found.",
+            }],
+            "confidence": "high",
+        })
+        result = validate_catalog(catalog, source_paths={"src/Clients/AccountsClient.cs"})
+        names = {dependency["name"] for dependency in result["dependencies"]}
+        self.assertIn("Redis", names)
 
     def test_rejects_literal_endpoint_hostnames(self):
         bad = json.loads(json.dumps(CATALOG))

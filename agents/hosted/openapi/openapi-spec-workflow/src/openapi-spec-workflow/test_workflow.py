@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from workflow import WorkflowError, parse_workflow_request, run_workflow
+from workflow import WorkflowError, parse_workflow_request, run_workflow, validate_discovery_output
 
 
 SOURCE = "https://github.com/source/app/tree/main/src/Api"
@@ -104,9 +104,17 @@ class WorkflowTests(unittest.TestCase):
             "gpt-4o",
             invoker=invoke,
         )
-        self.assertFalse(result["success"])
+        self.assertTrue(result["success"])
         self.assertEqual(1, result["generatedCount"])
         self.assertEqual(API_2, result["generationErrors"][0]["apiFile"])
+
+    def test_a_discovery_scan_failure_is_not_treated_as_an_empty_result(self):
+        with self.assertRaisesRegex(WorkflowError, "GitHub returned HTTP 404"):
+            validate_discovery_output(
+                {"error": {"code": "scan_failed", "message": "GitHub returned HTTP 404."}},
+                SOURCE,
+                100,
+            )
 
     def test_empty_discovery_succeeds_without_calling_the_publisher(self):
         def invoke(project, name, model, payload, max_attempts=2):
@@ -126,6 +134,33 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(0, result["discoveredCount"])
         self.assertEqual([], result["specifications"])
         self.assertIsNone(result["pullRequest"])
+
+    def test_deferred_partial_generation_still_succeeds_with_the_good_specifications(self):
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "discovery":
+                return [
+                    {"apiFile": API_1, "supportingFiles": []},
+                    {"apiFile": API_2, "supportingFiles": []},
+                ]
+            if name == "generator" and payload["apiFile"] == API_2:
+                raise RuntimeError("generation failed")
+            if name == "generator":
+                return dict(SPEC)
+            raise AssertionError("Publisher must not be called in deferred mode.")
+
+        result = run_workflow(
+            object(),
+            {"sourceUrl": SOURCE, "deferPublication": True},
+            "discovery",
+            "generator",
+            "publisher",
+            "gpt-4o",
+            invoker=invoke,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(1, len(result["specifications"]))
+        self.assertEqual(API_2, result["generationErrors"][0]["apiFile"])
 
     def test_can_defer_publication_and_return_generated_specifications(self):
         calls = []

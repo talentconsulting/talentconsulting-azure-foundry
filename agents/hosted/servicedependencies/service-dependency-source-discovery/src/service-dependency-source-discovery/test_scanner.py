@@ -93,6 +93,30 @@ class ScanTests(unittest.TestCase):
         paths = result["sourceFiles"]
         self.assertTrue(any(path.endswith("ReservationsApiClientFactory.cs") for path in paths))
 
+    def test_a_redis_cache_registration_is_a_candidate(self):
+        result = scan(SOURCE, archive({
+            "src/Startup.cs": (
+                'services.AddStackExchangeRedisCache(options => '
+                '{ options.Configuration = config["Redis:ConnectionString"]; });'
+            ),
+        }))
+
+        self.assertEqual(
+            ["https://github.com/source/app/blob/main/src/Startup.cs"],
+            result["sourceFiles"],
+        )
+
+    def test_merely_consuming_an_injected_distributed_cache_is_not_a_registration(self):
+        result = scan(SOURCE, archive({
+            "src/Services/AccountLookupService.cs": (
+                "class AccountLookupService { private readonly IDistributedCache cache; "
+                "public AccountLookupService(IDistributedCache cache) { this.cache = cache; } "
+                "public Task<string> Get(string id) => cache.GetStringAsync(id); }"
+            ),
+        }))
+
+        self.assertEqual([], result["sourceFiles"])
+
     def test_ignores_dotted_dotnet_test_project_folders(self):
         result = scan(SOURCE, archive({
             "src/CommitmentsV2/SFA.DAS.CommitmentsV2.UnitTests/Infrastructure/Api/WhenCallingPost.cs": (

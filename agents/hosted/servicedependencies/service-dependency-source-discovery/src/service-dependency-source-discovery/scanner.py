@@ -68,6 +68,15 @@ CLIENT_CONSTRUCTION_RE = re.compile(
     r"requests\.Session\s*\(|httpx\.Client\s*\()",
     re.IGNORECASE,
 )
+# Evidence that a Redis cache client is actually being constructed or registered. Deliberately narrower
+# than mere consumption of an injected IDistributedCache/ICache -- that interface doesn't say which
+# technology backs it, so only the site where a Redis-specific client or option type is configured counts.
+CACHE_REGISTRATION_RE = re.compile(
+    r"\b(?:AddStackExchangeRedisCache|AddDistributedRedisCache|StackExchangeRedisCacheOptions|"
+    r"ConnectionMultiplexer\.Connect(?:Async)?\s*\(|RedisCacheOptions|new\s+Redis(?:Client)?\s*\(|"
+    r"redis\.createClient\s*\(|redis\.Redis\s*\(|redis\.StrictRedis\s*\()",
+    re.IGNORECASE,
+)
 
 
 class ScanError(RuntimeError):
@@ -121,6 +130,7 @@ def _candidate(path: str, content: str) -> bool:
         bool(REGISTRATION_RE.search(content))
         or bool(CLIENT_CONSTRUCTION_RE.search(content))
         or bool(GENERIC_CLIENT_REGISTRATION_RE.search(content))
+        or bool(CACHE_REGISTRATION_RE.search(content))
     )
     is_proto_service = lowered.endswith(".proto") and bool(PROTO_SERVICE_RE.search(content))
     is_api_configuration = filename in CONFIG_NAMES and bool(API_INTEGRATION_RE.search(content))
@@ -134,6 +144,7 @@ def _priority(path: str, content: str) -> tuple[int, str]:
         REGISTRATION_RE.search(content)
         or CLIENT_CONSTRUCTION_RE.search(content)
         or GENERIC_CLIENT_REGISTRATION_RE.search(content)
+        or CACHE_REGISTRATION_RE.search(content)
         or filename in CONFIG_NAMES
     ):
         return (0, lowered)

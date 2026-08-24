@@ -117,6 +117,12 @@ def _validate_blob_url(value: object, source: tuple[str, str, str]) -> str:
 
 
 def validate_discovery_output(value: Any, source_url: str, max_files: int) -> list[dict[str, Any]]:
+    if isinstance(value, dict) and isinstance(value.get("error"), dict):
+        error = value["error"]
+        raise WorkflowError(
+            str(error.get("code", "discovery_failed")),
+            str(error.get("message", "Source discovery failed.")),
+        )
     if not isinstance(value, list):
         raise WorkflowError("invalid_discovery_output", "Discovery response must be a JSON array.")
     if len(value) > max_files:
@@ -268,8 +274,11 @@ def run_workflow(
         }
 
     if request.get("deferPublication", False):
+        # At least one specification generated successfully (checked above), so a partial batch
+        # still counts as success -- surface the per-file failures as generationErrors rather than
+        # discarding every specification that did generate.
         return {
-            "success": not generation_errors,
+            "success": True,
             "sourceUrl": request["sourceUrl"],
             "discoveredCount": len(api_files),
             "generatedCount": len(specifications),
@@ -289,7 +298,7 @@ def run_workflow(
     if not isinstance(publication, dict) or not isinstance(publication.get("success"), bool):
         raise WorkflowError("invalid_publisher_output", "PR creator response does not match its JSON contract.")
     return {
-        "success": publication["success"] and not generation_errors,
+        "success": publication["success"],
         "sourceUrl": request["sourceUrl"],
         "discoveredCount": len(api_files),
         "generatedCount": len(specifications),

@@ -52,9 +52,13 @@ async def handle_create(
     try:
         source_url = extract_source_url(await context.get_input_text() or "")
         result = await asyncio.to_thread(scan, source_url)
-    except Exception:
+    except Exception as error:
+        # A scan failure (bad ref, network error, malformed archive) is not the same as
+        # legitimately finding zero API files -- reporting it as an empty list here would let the
+        # workflow treat a failed scan as a successful empty one and advance the manifest's commit
+        # hash as though this repository had actually been checked.
         logger.exception("OpenAPI Source Discovery scan failed.")
-        result = []
+        result = {"error": {"code": "scan_failed", "message": str(error)[:300]}}
 
     yield text.emit_delta(json.dumps(result, separators=(",", ":")))
     yield text.emit_text_done()

@@ -200,7 +200,26 @@ def validate_manifest(value: object, max_entries: int) -> list[ManifestEntry]:
     return entries
 
 
+def _default_branch(entry: ManifestEntry) -> str:
+    endpoint = (
+        f"https://api.github.com/repos/{urllib.parse.quote(entry.owner, safe='')}/"
+        f"{urllib.parse.quote(entry.repository, safe='')}"
+    )
+    response = json.loads(_read_url(endpoint).decode("utf-8"))
+    branch = response.get("default_branch") if isinstance(response, dict) else None
+    if not isinstance(branch, str) or not branch:
+        raise ManifestError("github_api_error", f"GitHub did not report a default branch for {entry.repository_name}.")
+    return branch
+
+
 def latest_commit(entry: ManifestEntry) -> str:
+    default_branch = _default_branch(entry)
+    if entry.ref != default_branch:
+        raise ManifestError(
+            "invalid_manifest",
+            f"Manifest entry for {entry.repository_name} scans ref {entry.ref!r}, but the repository's "
+            f"default branch is {default_branch!r}. Only the default branch may be scanned.",
+        )
     endpoint = (
         f"https://api.github.com/repos/{urllib.parse.quote(entry.owner, safe='')}/"
         f"{urllib.parse.quote(entry.repository, safe='')}/commits/{urllib.parse.quote(entry.ref, safe='')}"
@@ -250,42 +269,65 @@ def invoke_agent(
     raise last_error
 
 
-def _spec_target_path(entry: ManifestEntry, api_file: object) -> str:
+def _relative_path_parts(entry: ManifestEntry, api_file: object) -> list[str]:
     if not isinstance(api_file, str):
         raise ManifestError("invalid_workflow_output", "Generated apiFile must be a string.")
     parsed = urllib.parse.urlparse(api_file)
     parts = [urllib.parse.unquote(part) for part in parsed.path.split("/") if part]
     if len(parts) < 5 or parts[0] != entry.owner or parts[1] != entry.repository or parts[2] != "blob":
         raise ManifestError("invalid_workflow_output", "Generated apiFile does not match its manifest repository.")
-    filename = parts[-1]
-    stem = filename.rsplit(".", 1)[0] if "." in filename else filename
-    return f"{entry.repository}/open-api/{stem}.openapi.json"
+    return parts[4:]
 
 
-def _validate_deferred_output(value: Any, entry: ManifestEntry) -> list[dict[str, Any]]:
+def _spec_target_paths(entry: ManifestEntry, api_files: list[object]) -> list[str]:
+    relative = [_relative_path_parts(entry, api_file) for api_file in api_files]
+    stems = [parts[-1].rsplit(".", 1)[0] if "." in parts[-1] else parts[-1] for parts in relative]
+    counts: dict[str, int] = {}
+    for stem in stems:
+        counts[stem] = counts.get(stem, 0) + 1
+    # Two files with the same name (e.g. distinct Api and Web projects both defining an
+    # EmployerAgreementController) would otherwise collide on the same output path. Fall back to
+    # the full relative path -- always unique within one repository -- only for the colliding names,
+    # so the common case keeps its short, filename-only path.
+    slugs = [
+        "-".join(parts[:-1] + [stem]) if counts[stem] > 1 and len(parts) > 1 else stem
+        for parts, stem in zip(relative, stems)
+    ]
+    return [f"{entry.repository}/open-api/{stem}.openapi.json" for stem in slugs]
+
+
+def _validate_deferred_output(value: Any, entry: ManifestEntry) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     if not isinstance(value, dict) or not isinstance(value.get("success"), bool):
         raise ManifestError("invalid_workflow_output", "Spec workflow returned an invalid response.")
     if not value["success"]:
         message = "Specification workflow did not completely generate this repository."
-        errors = value.get("generationErrors")
-        if isinstance(errors, list) and errors:
-            message = f"{message} {len(errors)} generation error(s)."
+        generation_errors = value.get("generationErrors")
+        if isinstance(generation_errors, list) and generation_errors:
+            message = f"{message} {len(generation_errors)} generation error(s)."
+        else:
+            # A failure with no per-file generationErrors means the workflow raised before it got
+            # that far (e.g. too many discovered files) -- the real reason lives in errors[0], not
+            # generationErrors, so surface it instead of this generic message on its own.
+            top_level_errors = value.get("errors")
+            if isinstance(top_level_errors, list) and top_level_errors and isinstance(top_level_errors[0], dict):
+                detail = top_level_errors[0].get("message")
+                if isinstance(detail, str) and detail:
+                    message = f"{message} {detail}"
         raise ManifestError("spec_generation_failed", message)
     specifications = value.get("specifications")
     if not isinstance(specifications, list):
         raise ManifestError("invalid_workflow_output", "Spec workflow returned an invalid specifications field.")
-    result = []
     for item in specifications:
         if not isinstance(item, dict) or set(item) != {"apiFile", "specification"}:
             raise ManifestError("invalid_workflow_output", "A generated specification has an invalid shape.")
-        result.append(
-            {
-                "apiFile": item["apiFile"],
-                "specification": item["specification"],
-                "targetPath": _spec_target_path(entry, item["apiFile"]),
-            }
-        )
-    return result
+    target_paths = _spec_target_paths(entry, [item["apiFile"] for item in specifications])
+    validated = [
+        {"apiFile": item["apiFile"], "specification": item["specification"], "targetPath": target_path}
+        for item, target_path in zip(specifications, target_paths)
+    ]
+    generation_errors = value.get("generationErrors")
+    warnings = generation_errors if isinstance(generation_errors, list) else []
+    return validated, warnings
 
 
 def run_manifest(
@@ -349,12 +391,12 @@ def run_manifest(
                 model,
                 {"sourceUrl": entry.source_url, "deferPublication": True},
             )
-            specifications = _validate_deferred_output(workflow_result, entry)
+            specifications, warnings = _validate_deferred_output(workflow_result, entry)
             if len(combined_specs) + len(specifications) > max_specs:
                 raise ManifestError("too_many_specifications", f"A run may publish at most {max_specs} specs.")
             combined_specs.extend(specifications)
             updated_manifest[entry.index]["specs"]["last-commit-hash-scanned"] = commit
-            generated_repositories.append({"repository": entry.repository_name, "commit": commit})
+            generated_repositories.append({"repository": entry.repository_name, "commit": commit, "warnings": warnings})
         except Exception as error:
             failures.append(
                 {

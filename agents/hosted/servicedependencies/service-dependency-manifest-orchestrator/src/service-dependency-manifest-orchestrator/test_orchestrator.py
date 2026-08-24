@@ -4,7 +4,7 @@ import urllib.error
 from io import BytesIO
 from unittest.mock import patch
 
-from orchestrator import ManifestError, _read_url, parse_request, run_manifest, validate_manifest
+from orchestrator import ManifestEntry, ManifestError, _read_url, latest_commit, parse_request, run_manifest, validate_manifest
 
 
 MANIFEST_URL = "https://github.com/target/catalogs/blob/main/manifest.json"
@@ -33,6 +33,37 @@ class ManifestTests(unittest.TestCase):
         with patch("urllib.request.urlopen", side_effect=error):
             with self.assertRaisesRegex(ManifestError, "No commit found for SHA: main"):
                 _read_url(error.url)
+
+    def test_latest_commit_rejects_a_ref_that_is_not_the_default_branch(self):
+        entry = ManifestEntry(
+            index=0, owner="source", repository="app", repository_url="https://github.com/source/app",
+            ref="feature-x", scan_path="src", path_to_scan="tree/feature-x/src", last_commit="",
+        )
+
+        def fake_read_url(url):
+            if url == "https://api.github.com/repos/source/app":
+                return json.dumps({"default_branch": "main"}).encode("utf-8")
+            raise AssertionError(f"unexpected URL {url}")
+
+        with patch("orchestrator._read_url", side_effect=fake_read_url):
+            with self.assertRaisesRegex(ManifestError, "default branch is 'main'"):
+                latest_commit(entry)
+
+    def test_latest_commit_resolves_the_sha_for_the_default_branch(self):
+        entry = ManifestEntry(
+            index=0, owner="source", repository="app", repository_url="https://github.com/source/app",
+            ref="main", scan_path="src", path_to_scan="tree/main/src", last_commit="",
+        )
+
+        def fake_read_url(url):
+            if url == "https://api.github.com/repos/source/app":
+                return json.dumps({"default_branch": "main"}).encode("utf-8")
+            if url == "https://api.github.com/repos/source/app/commits/main":
+                return json.dumps({"sha": NEW_SHA}).encode("utf-8")
+            raise AssertionError(f"unexpected URL {url}")
+
+        with patch("orchestrator._read_url", side_effect=fake_read_url):
+            self.assertEqual(NEW_SHA, latest_commit(entry))
 
     def test_input_has_exactly_source_url(self):
         self.assertEqual(MANIFEST_URL, parse_request(json.dumps({"sourceUrl": MANIFEST_URL}))["sourceUrl"])
