@@ -15,5 +15,5 @@ jobs:
       - name: Check Dependabot alerts for every manifest repository
         env:
           DEPENDABOT_ALERTS_TOKEN: ${{ secrets.DEPENDABOT_ALERTS_TOKEN }}
-          GITHUB_PR_TOKEN: ${{ secrets.GITHUB_PR_TOKEN }}
+          GITHUB_PR_TOKEN: ${{ secrets.SERVICE_CATALOGUE_PR_TOKEN }}
         run: python3 scripts/check_dependabot_alerts.py
