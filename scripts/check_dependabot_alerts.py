@@ -103,18 +103,29 @@ def manifest_repositories(manifest: list[dict[str, Any]]) -> list[str]:
     return repositories
 
 
+def _next_link(headers: dict[str, str]) -> str | None:
+    link_header = next((value for key, value in headers.items() if key.lower() == "link"), None)
+    if not link_header:
+        return None
+    for part in link_header.split(","):
+        segment = part.strip()
+        if 'rel="next"' not in segment:
+            continue
+        start, end = segment.find("<"), segment.find(">")
+        if start != -1 and end != -1:
+            return segment[start + 1:end]
+    return None
+
+
 def fetch_open_alerts(repository: str, token: str) -> list[dict[str, Any]]:
     alerts: list[dict[str, Any]] = []
-    page = 1
-    while True:
-        url = f"{API_URL}/repos/{repository}/dependabot/alerts?state=open&per_page={ALERTS_PER_PAGE}&page={page}"
-        data, _ = _api_request("GET", url, token)
+    url = f"{API_URL}/repos/{repository}/dependabot/alerts?state=open&per_page={ALERTS_PER_PAGE}"
+    while url:
+        data, headers = _api_request("GET", url, token)
         if not isinstance(data, list):
             raise CheckError(f"Unexpected Dependabot alerts response for {repository}.")
         alerts.extend(data)
-        if len(data) < ALERTS_PER_PAGE:
-            break
-        page += 1
+        url = _next_link(headers)
     return alerts
 
 
