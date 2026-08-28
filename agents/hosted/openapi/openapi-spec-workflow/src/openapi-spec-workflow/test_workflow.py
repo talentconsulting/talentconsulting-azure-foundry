@@ -108,6 +108,36 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(1, result["generatedCount"])
         self.assertEqual(API_2, result["generationErrors"][0]["apiFile"])
 
+    def test_a_supplied_apifiles_override_skips_calling_discovery(self):
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "discovery":
+                raise AssertionError("Discovery must not be called when apiFiles is supplied.")
+            if name == "generator":
+                return dict(SPEC)
+            raise AssertionError("Publisher must not be called in deferred mode.")
+
+        result = run_workflow(
+            object(),
+            {
+                "sourceUrl": SOURCE,
+                "deferPublication": True,
+                "apiFiles": [{"apiFile": API_1, "supportingFiles": []}],
+            },
+            "discovery",
+            "generator",
+            "publisher",
+            "gpt-4o",
+            invoker=invoke,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(1, result["discoveredCount"])
+        self.assertEqual(API_1, result["specifications"][0]["apiFile"])
+
+    def test_apifiles_override_must_be_an_array(self):
+        with self.assertRaisesRegex(WorkflowError, "apiFiles must be an array"):
+            parse_workflow_request(json.dumps({"sourceUrl": SOURCE, "deferPublication": True, "apiFiles": "not-a-list"}))
+
     def test_a_discovery_scan_failure_is_not_treated_as_an_empty_result(self):
         with self.assertRaisesRegex(WorkflowError, "GitHub returned HTTP 404"):
             validate_discovery_output(

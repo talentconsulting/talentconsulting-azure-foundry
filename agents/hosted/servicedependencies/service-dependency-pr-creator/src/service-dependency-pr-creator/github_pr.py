@@ -142,19 +142,28 @@ def validate_request(payload: dict[str, Any]) -> dict[str, Any]:
     if len(catalogs) > MAX_CATALOGS:
         raise PublicationError("too_many_catalogs", f"At most {MAX_CATALOGS} catalogs are allowed.")
     target_directory = _clean_relative_path(payload.get("targetDirectory", "service-dependencies"), "targetDirectory")
+    required_keys = {"sourceUrl", "catalog"}
+    optional_keys = {"repository", "targetPath", "puml"}
     validated = []
     seen_paths: set[str] = set()
     total_bytes = 0
     for item in catalogs:
-        if not isinstance(item, dict) or set(item) not in (
-            {"sourceUrl", "catalog"}, {"sourceUrl", "catalog", "repository"},
-            {"sourceUrl", "catalog", "targetPath"}, {"sourceUrl", "catalog", "repository", "targetPath"},
-        ):
-            raise PublicationError("invalid_catalog", "Each catalog must contain sourceUrl and catalog, with optional repository and targetPath.")
+        if not isinstance(item, dict) or not required_keys <= set(item) <= required_keys | optional_keys:
+            raise PublicationError(
+                "invalid_catalog",
+                "Each catalog must contain sourceUrl and catalog, with optional repository, targetPath, and puml.",
+            )
         catalog = item["catalog"]
-        if not isinstance(catalog, dict) or set(catalog) != {"repository", "ref", "path", "dependencies"}:
-            raise PublicationError("invalid_catalog", "Each catalog must contain repository, ref, path, and dependencies.")
-        if any(not isinstance(catalog[field], str) for field in ("repository", "ref", "path")) or not isinstance(catalog["dependencies"], list):
+        if not isinstance(catalog, dict) or set(catalog) != {"repository", "ref", "path", "systemName", "containers", "dependencies"}:
+            raise PublicationError(
+                "invalid_catalog",
+                "Each catalog must contain repository, ref, path, systemName, containers, and dependencies.",
+            )
+        if (
+            any(not isinstance(catalog[field], str) for field in ("repository", "ref", "path", "systemName"))
+            or not isinstance(catalog["containers"], list)
+            or not isinstance(catalog["dependencies"], list)
+        ):
             raise PublicationError("invalid_catalog", "Each catalog contains invalid service-dependency fields.")
         output_path = _clean_relative_path(
             item.get("targetPath", posixpath.join(target_directory, _source_repository(item["sourceUrl"]), "service-dependencies.json")),
@@ -168,6 +177,17 @@ def validate_request(payload: dict[str, Any]) -> dict[str, Any]:
         content = (json.dumps(catalog, indent=2) + "\n").encode("utf-8")
         total_bytes += len(content)
         validated.append({"sourceUrl": item["sourceUrl"], "path": output_path, "content": content})
+        puml = item.get("puml")
+        if puml:
+            if not isinstance(puml, str):
+                raise PublicationError("invalid_catalog", "puml must be a string.")
+            puml_path = output_path.removesuffix(".json") + ".puml"
+            if puml_path in seen_paths:
+                raise PublicationError("duplicate_output_path", f"Multiple catalogs map to {puml_path}.")
+            seen_paths.add(puml_path)
+            puml_content = (puml if puml.endswith("\n") else puml + "\n").encode("utf-8")
+            total_bytes += len(puml_content)
+            validated.append({"sourceUrl": item["sourceUrl"], "path": puml_path, "content": puml_content})
     validated_manifest = None
     manifest_file = payload.get("manifestFile")
     if manifest_file is not None:

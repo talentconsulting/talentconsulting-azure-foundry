@@ -74,6 +74,7 @@ def parse_workflow_request(input_text: str) -> dict[str, Any]:
         "pullRequestTitle",
         "pullRequestBody",
         "deferPublication",
+        "apiFiles",
     }
     if not set(payload).issubset(allowed):
         raise WorkflowError("invalid_input", "Input contains unsupported properties.")
@@ -86,10 +87,12 @@ def parse_workflow_request(input_text: str) -> dict[str, Any]:
         raise WorkflowError("invalid_input", "targetRepository is required.")
     if target is not None and (not isinstance(target, str) or not target.strip()):
         raise WorkflowError("invalid_input", "targetRepository must be a non-empty string.")
-    for field in allowed - {"sourceUrl", "targetRepository", "deferPublication"}:
+    for field in allowed - {"sourceUrl", "targetRepository", "deferPublication", "apiFiles"}:
         value = payload.get(field)
         if value is not None and (not isinstance(value, str) or not value.strip()):
             raise WorkflowError("invalid_input", f"{field} must be a non-empty string.")
+    if "apiFiles" in payload and not isinstance(payload["apiFiles"], list):
+        raise WorkflowError("invalid_input", "apiFiles must be an array when supplied.")
     return payload
 
 
@@ -214,8 +217,15 @@ def run_workflow(
     invoker: Callable[..., Any] = invoke_agent,
 ) -> dict[str, Any]:
     request = parse_workflow_request(json.dumps(request))
-    discovery = invoker(project, discovery_name, model, {"sourceUrl": request["sourceUrl"]})
-    api_files = validate_discovery_output(discovery, request["sourceUrl"], max_files)
+    override = request.get("apiFiles")
+    if override is not None:
+        # A caller (the manifest orchestrator, batching a repository too large to generate in one
+        # call) has already run discovery itself and is handing us exactly the slice to generate --
+        # skip calling the discovery agent again.
+        api_files = validate_discovery_output(override, request["sourceUrl"], max_files)
+    else:
+        discovery = invoker(project, discovery_name, model, {"sourceUrl": request["sourceUrl"]})
+        api_files = validate_discovery_output(discovery, request["sourceUrl"], max_files)
     if not api_files:
         # No candidate controller files means there is no REST API surface to document -- a
         # legitimate, stable result, not a failure. Report success with nothing generated so the

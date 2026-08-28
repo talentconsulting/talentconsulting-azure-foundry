@@ -92,8 +92,10 @@ jobs:
           azd env set SERVICE_DEPENDENCY_WORKFLOW_AGENT_NAME service-dependency-workflow
           azd env set SERVICE_DEPENDENCY_DISCOVERY_MAX_FILES 150
           azd env set SERVICE_DEPENDENCY_GENERATOR_BATCH_SIZE 12
+          azd env set SERVICE_DEPENDENCY_GENERATOR_CONCURRENCY 8
           azd env set SERVICE_DEPENDENCY_MANIFEST_MAX_ENTRIES 25
           azd env set SERVICE_DEPENDENCY_MANIFEST_MAX_CATALOGS 100
+          azd env set SERVICE_DEPENDENCY_MANIFEST_CONCURRENCY 6
 
       - name: Run unit tests
         working-directory: ${{ inputs.project_dir }}

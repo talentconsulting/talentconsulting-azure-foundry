@@ -22,6 +22,7 @@ GENERATOR_NAME = os.getenv("SERVICE_DEPENDENCY_GENERATOR_AGENT_NAME", "service-d
 PUBLISHER_NAME = os.getenv("SERVICE_DEPENDENCY_PR_CREATOR_AGENT_NAME", "service-dependency-pr-creator")
 MAX_FILES = int(os.getenv("SERVICE_DEPENDENCY_DISCOVERY_MAX_FILES", "150"))
 BATCH_SIZE = int(os.getenv("SERVICE_DEPENDENCY_GENERATOR_BATCH_SIZE", "12"))
+MAX_CONCURRENCY = int(os.getenv("SERVICE_DEPENDENCY_GENERATOR_CONCURRENCY", "8"))
 if not PROJECT_ENDPOINT:
     raise EnvironmentError("FOUNDRY_PROJECT_ENDPOINT is required.")
 
@@ -41,7 +42,8 @@ async def handle_create(request: CreateResponse, context: ResponseContext, cance
     try:
         payload = parse_workflow_request(await context.get_input_text() or "")
         result = await asyncio.to_thread(
-            run_workflow, project_client, payload, DISCOVERY_NAME, GENERATOR_NAME, PUBLISHER_NAME, MODEL, MAX_FILES, BATCH_SIZE
+            run_workflow, project_client, payload, DISCOVERY_NAME, GENERATOR_NAME, PUBLISHER_NAME, MODEL,
+            MAX_FILES, BATCH_SIZE, MAX_CONCURRENCY,
         )
     except Exception as error:
         logger.exception("Service-dependency workflow failed.")

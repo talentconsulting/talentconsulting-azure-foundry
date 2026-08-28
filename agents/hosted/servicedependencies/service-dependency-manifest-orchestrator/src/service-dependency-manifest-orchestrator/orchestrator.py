@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import copy
 import json
 import re
@@ -259,20 +260,30 @@ def _validate_workflow_output(value: Any, entry: ManifestEntry) -> list[dict[str
     if not isinstance(catalogs, list) or len(catalogs) != 1:
         raise ManifestError("invalid_workflow_output", "Service-dependency workflow must return exactly one catalog.")
     item = catalogs[0]
-    if not isinstance(item, dict) or set(item) != {"sourceUrl", "catalog"} or item["sourceUrl"] != entry.source_url:
+    if not isinstance(item, dict) or not {"sourceUrl", "catalog"} <= set(item) <= {"sourceUrl", "catalog", "puml"} or item["sourceUrl"] != entry.source_url:
         raise ManifestError("invalid_workflow_output", "Service-dependency workflow returned an invalid catalog item.")
     catalog = item["catalog"]
-    if not isinstance(catalog, dict) or set(catalog) != {"repository", "ref", "path", "dependencies"}:
+    if not isinstance(catalog, dict) or set(catalog) != {"repository", "ref", "path", "systemName", "containers", "dependencies"}:
         raise ManifestError("invalid_workflow_output", "Service-dependency workflow returned an invalid catalog.")
-    if any(not isinstance(catalog[field], str) for field in ("repository", "ref", "path")) or not isinstance(catalog["dependencies"], list):
+    if (
+        any(not isinstance(catalog[field], str) for field in ("repository", "ref", "path", "systemName"))
+        or not isinstance(catalog["containers"], list)
+        or not isinstance(catalog["dependencies"], list)
+    ):
         raise ManifestError("invalid_workflow_output", "Service-dependency workflow returned an incomplete catalog.")
     if (catalog["repository"], catalog["ref"], catalog["path"]) != (entry.repository_name, entry.ref, entry.scan_path):
         raise ManifestError("invalid_workflow_output", "Service-dependency workflow returned mismatched source identity.")
-    return [{
+    puml = item.get("puml")
+    if puml is not None and not isinstance(puml, str):
+        raise ManifestError("invalid_workflow_output", "Service-dependency workflow returned an invalid puml diagram.")
+    result = {
         "sourceUrl": item["sourceUrl"],
         "catalog": catalog,
         "targetPath": f"{entry.repository}/service-dependencies/service-dependencies.json",
-    }]
+    }
+    if puml:
+        result["puml"] = puml
+    return [result]
 
 
 def run_manifest(
@@ -283,6 +294,7 @@ def run_manifest(
     model: str,
     max_entries: int = 25,
     max_catalogs: int = 100,
+    max_concurrency: int = 6,
     manifest_loader: Callable[[GitHubBlob], object] = download_manifest,
     commit_resolver: Callable[[ManifestEntry], str] = latest_commit,
     invoker: Callable[..., Any] = invoke_agent,
@@ -294,18 +306,23 @@ def run_manifest(
     up_to_date: list[dict[str, str]] = []
     changed: list[tuple[ManifestEntry, str]] = []
     failures: list[dict[str, str]] = []
-    for entry in entries:
-        try:
-            commit = commit_resolver(entry)
-            if commit == entry.last_commit:
-                up_to_date.append({"repository": entry.repository_name, "commit": commit})
-            else:
-                changed.append((entry, commit))
-        except Exception as error:
-            failures.append({
-                "repository": entry.repository_name, "stage": "commit_check",
-                "errorType": type(error).__name__, "message": str(error)[:300],
-            })
+    # Each entry's commit check is an independent GitHub API call -- run them concurrently (bounded)
+    # rather than one repository at a time, then apply the results in the original entry order so
+    # the outcome doesn't depend on which network call happens to finish first.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, min(max_concurrency, len(entries)))) as executor:
+        commit_futures = [(entry, executor.submit(commit_resolver, entry)) for entry in entries]
+        for entry, future in commit_futures:
+            try:
+                commit = future.result()
+                if commit == entry.last_commit:
+                    up_to_date.append({"repository": entry.repository_name, "commit": commit})
+                else:
+                    changed.append((entry, commit))
+            except Exception as error:
+                failures.append({
+                    "repository": entry.repository_name, "stage": "commit_check",
+                    "errorType": type(error).__name__, "message": str(error)[:300],
+                })
     if not changed:
         return {
             "success": not failures,
@@ -321,20 +338,29 @@ def run_manifest(
         }
     combined_catalogs: list[dict[str, Any]] = []
     generated_repositories: list[dict[str, Any]] = []
-    for entry, commit in changed:
-        try:
-            workflow_result = invoker(project, workflow_name, model, {"sourceUrl": entry.source_url, "deferPublication": True})
-            catalogs = _validate_workflow_output(workflow_result, entry)
-            if len(combined_catalogs) + len(catalogs) > max_catalogs:
-                raise ManifestError("too_many_catalogs", f"A run may publish at most {max_catalogs} service-dependency catalogs.")
-            combined_catalogs.extend(catalogs)
-            updated_manifest[entry.index][MANIFEST_NODE]["last-commit-hash-scanned"] = commit
-            generated_repositories.append({"repository": entry.repository_name, "commit": commit, "warnings": []})
-        except Exception as error:
-            failures.append({
-                "repository": entry.repository_name, "stage": "catalog_workflow",
-                "errorType": type(error).__name__, "message": str(error)[:300],
-            })
+    # Each repository's catalog generation is an independent, blocking call to the service-dependency
+    # workflow agent -- run them concurrently (bounded), then apply results in the original entry order
+    # so which repositories count against max_catalogs stays deterministic across runs.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, min(max_concurrency, len(changed)))) as executor:
+        workflow_futures = [
+            (entry, commit, executor.submit(
+                invoker, project, workflow_name, model, {"sourceUrl": entry.source_url, "deferPublication": True},
+            ))
+            for entry, commit in changed
+        ]
+        for entry, commit, future in workflow_futures:
+            try:
+                catalogs = _validate_workflow_output(future.result(), entry)
+                if len(combined_catalogs) + len(catalogs) > max_catalogs:
+                    raise ManifestError("too_many_catalogs", f"A run may publish at most {max_catalogs} service-dependency catalogs.")
+                combined_catalogs.extend(catalogs)
+                updated_manifest[entry.index][MANIFEST_NODE]["last-commit-hash-scanned"] = commit
+                generated_repositories.append({"repository": entry.repository_name, "commit": commit, "warnings": []})
+            except Exception as error:
+                failures.append({
+                    "repository": entry.repository_name, "stage": "catalog_workflow",
+                    "errorType": type(error).__name__, "message": str(error)[:300],
+                })
     if not combined_catalogs:
         return {
             "success": False,

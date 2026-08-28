@@ -30,6 +30,8 @@ services:
         value: ${SERVICE_DEPENDENCY_MANIFEST_MAX_ENTRIES}
       - name: SERVICE_DEPENDENCY_MANIFEST_MAX_CATALOGS
         value: ${SERVICE_DEPENDENCY_MANIFEST_MAX_CATALOGS}
+      - name: SERVICE_DEPENDENCY_MANIFEST_CONCURRENCY
+        value: ${SERVICE_DEPENDENCY_MANIFEST_CONCURRENCY}
     kind: hosted
     name: service-dependency-manifest-orchestrator
     displayName: Service Dependency Manifest Orchestrator

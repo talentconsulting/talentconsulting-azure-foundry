@@ -28,13 +28,53 @@ class ScanTests(unittest.TestCase):
         }))
 
         paths = result["sourceFiles"]
-        self.assertEqual(2, len(paths))
+        self.assertEqual(4, len(paths))
         self.assertTrue(any(path.endswith("src/Startup.cs") for path in paths))
         self.assertTrue(any(path.endswith("src/appsettings.json") for path in paths))
         self.assertFalse(any(path.endswith("AccountsClient.cs") for path in paths))
-        self.assertFalse(any(path.endswith("src/Messaging/OrderConsumer.cs") for path in paths))
-        self.assertFalse(any(path.endswith("ProviderCommitmentsDbContext.cs") for path in paths))
+        self.assertTrue(any(path.endswith("src/Messaging/OrderConsumer.cs") for path in paths))
+        self.assertTrue(any(path.endswith("ProviderCommitmentsDbContext.cs") for path in paths))
         self.assertFalse(any(path.endswith("src/Domain/Order.cs") for path in paths))
+
+    def test_a_dbcontext_declaration_is_a_candidate(self):
+        result = scan(SOURCE, archive({
+            "src/Data/ProviderCommitmentsDbContext.cs": "class ProviderCommitmentsDbContext : DbContext { }",
+        }))
+
+        self.assertEqual(
+            ["https://github.com/source/app/blob/main/src/Data/ProviderCommitmentsDbContext.cs"],
+            result["sourceFiles"],
+        )
+
+    def test_a_servicebus_client_construction_is_a_candidate(self):
+        result = scan(SOURCE, archive({
+            "src/Messaging/OrderConsumer.cs": "class OrderConsumer { ServiceBusClient bus = new ServiceBusClient(config); }",
+        }))
+
+        self.assertEqual(
+            ["https://github.com/source/app/blob/main/src/Messaging/OrderConsumer.cs"],
+            result["sourceFiles"],
+        )
+
+    def test_a_blob_storage_client_construction_is_a_candidate(self):
+        result = scan(SOURCE, archive({
+            "src/Storage/DocumentStore.cs": "class DocumentStore { BlobServiceClient client = new BlobServiceClient(config); }",
+        }))
+
+        self.assertEqual(
+            ["https://github.com/source/app/blob/main/src/Storage/DocumentStore.cs"],
+            result["sourceFiles"],
+        )
+
+    def test_a_secret_client_construction_is_a_candidate(self):
+        result = scan(SOURCE, archive({
+            "src/Secrets/SecretsProvider.cs": "class SecretsProvider { SecretClient client = new SecretClient(vaultUri, credential); }",
+        }))
+
+        self.assertEqual(
+            ["https://github.com/source/app/blob/main/src/Secrets/SecretsProvider.cs"],
+            result["sourceFiles"],
+        )
 
     def test_a_client_that_only_consumes_an_injected_httpclient_is_not_a_registration(self):
         result = scan(SOURCE, archive({
@@ -139,6 +179,48 @@ class ScanTests(unittest.TestCase):
 
         self.assertEqual(
             ["https://github.com/source/app/blob/main/src/Clients/BillingClient.cs"],
+            result["sourceFiles"],
+        )
+
+    def test_a_csproj_file_is_always_a_candidate(self):
+        result = scan(SOURCE, archive({
+            "src/Api/SFA.DAS.CommitmentsV2.Api.csproj": '<Project Sdk="Microsoft.NET.Sdk.Web"></Project>',
+        }))
+
+        self.assertEqual(
+            ["https://github.com/source/app/blob/main/src/Api/SFA.DAS.CommitmentsV2.Api.csproj"],
+            result["sourceFiles"],
+        )
+
+    def test_program_cs_is_always_a_candidate(self):
+        result = scan(SOURCE, archive({
+            "src/Api/Program.cs": "var builder = WebApplication.CreateBuilder(args);",
+        }))
+
+        self.assertEqual(
+            ["https://github.com/source/app/blob/main/src/Api/Program.cs"],
+            result["sourceFiles"],
+        )
+
+    def test_container_shape_markers_do_not_select_every_matching_file(self):
+        # A marker like BackgroundService or IHandleMessages appears on every one of a project's many
+        # job/handler classes, not just its entry point. Only Program.cs/Startup.cs/*.csproj should be
+        # selected for this signal -- selecting every matching file would crowd out real dependency
+        # evidence in a repository with dozens of message handlers.
+        result = scan(SOURCE, archive({
+            "src/Jobs/Worker.cs": "public class Worker : BackgroundService { }",
+            "src/MessageHandlers/OrderHandler.cs": "public class OrderHandler : IHandleMessages<OrderCreated> { }",
+        }))
+
+        self.assertEqual([], result["sourceFiles"])
+
+    def test_program_cs_is_a_candidate_regardless_of_its_shape_marker(self):
+        result = scan(SOURCE, archive({
+            "src/Jobs/Program.cs": "public class Worker : BackgroundService { }",
+        }))
+
+        self.assertEqual(
+            ["https://github.com/source/app/blob/main/src/Jobs/Program.cs"],
             result["sourceFiles"],
         )
 

@@ -22,6 +22,7 @@ WORKFLOW_NAME = os.getenv("SERVICE_DEPENDENCY_WORKFLOW_AGENT_NAME", "service-dep
 PUBLISHER_NAME = os.getenv("SERVICE_DEPENDENCY_PR_CREATOR_AGENT_NAME", "service-dependency-pr-creator")
 MAX_ENTRIES = int(os.getenv("SERVICE_DEPENDENCY_MANIFEST_MAX_ENTRIES", "25"))
 MAX_CATALOGS = int(os.getenv("SERVICE_DEPENDENCY_MANIFEST_MAX_CATALOGS", "100"))
+MAX_CONCURRENCY = int(os.getenv("SERVICE_DEPENDENCY_MANIFEST_CONCURRENCY", "6"))
 if not PROJECT_ENDPOINT:
     raise EnvironmentError("FOUNDRY_PROJECT_ENDPOINT is required.")
 
@@ -60,7 +61,8 @@ async def handle_create(request: CreateResponse, context: ResponseContext, cance
         payload = parse_request(await context.get_input_text() or "")
         source_url = payload["sourceUrl"]
         result = await asyncio.to_thread(
-            run_manifest, project_client, payload, WORKFLOW_NAME, PUBLISHER_NAME, MODEL, MAX_ENTRIES, MAX_CATALOGS
+            run_manifest, project_client, payload, WORKFLOW_NAME, PUBLISHER_NAME, MODEL,
+            MAX_ENTRIES, MAX_CATALOGS, MAX_CONCURRENCY,
         )
     except Exception as error:
         logger.exception("Manifest-driven service-dependency orchestration failed.")

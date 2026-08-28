@@ -17,9 +17,12 @@ MAX_FILES = 150
 MAX_FILE_BYTES = 512 * 1024
 MAX_TOTAL_BYTES = 3 * 1024 * 1024
 SUPPORTED_EXTENSIONS = {
-    ".bicep", ".config", ".cs", ".go", ".gradle", ".java", ".js", ".json", ".jsx", ".kt",
+    ".bicep", ".config", ".cs", ".csproj", ".go", ".gradle", ".java", ".js", ".json", ".jsx", ".kt",
     ".php", ".props", ".proto", ".py", ".rb", ".tf", ".targets", ".toml", ".ts", ".tsx", ".xml", ".yaml", ".yml",
 }
+# Entry-point/project files are always worth scanning even without dependency-registration evidence --
+# they're what reveals whether a project is a web app, an API, a job, or a message handler.
+CONTAINER_SHAPE_FILENAMES = {"program.cs", "startup.cs"}
 IGNORED_PARTS = {
     ".git", ".github", ".idea", ".vs", ".vscode", "bin", "build", "coverage", "dist", "fixtures",
     "mocks", "node_modules", "obj", "packages", "snapshots", "test", "tests", "testdata", "unittests",
@@ -77,6 +80,32 @@ CACHE_REGISTRATION_RE = re.compile(
     r"redis\.createClient\s*\(|redis\.Redis\s*\(|redis\.StrictRedis\s*\()",
     re.IGNORECASE,
 )
+# Evidence that a database client, connection, or ORM context is used -- these are all
+# technology-specific type names, so a bare reference is enough to evidence the dependency.
+DATABASE_REGISTRATION_RE = re.compile(
+    r"\b(?:AddDbContext(?:Pool)?|DbContext|SqlConnection|NpgsqlConnection|MongoClient|CosmosClient)\b",
+    re.IGNORECASE,
+)
+# Evidence that a message-broker producer, consumer, or channel is used -- these are all
+# technology-specific type names, unlike a generic IConsumer/IProducer interface, so a bare
+# reference is enough (the same treatment DATABASE_REGISTRATION_RE gives DbContext).
+MESSAGE_BROKER_REGISTRATION_RE = re.compile(
+    r"\b(?:ServiceBusClient|ServiceBusProcessor|ServiceBusSender|new\s+ConnectionFactory\s*\(|"
+    r"RabbitMQ\.Client|IModel\b|ProducerBuilder|ConsumerBuilder|KafkaProducer|KafkaConsumer|"
+    r"AmazonSQSClient|AmazonSNSClient)\b",
+    re.IGNORECASE,
+)
+# Evidence that an object-storage (blob/bucket) client is used -- technology-specific type names.
+OBJECT_STORAGE_REGISTRATION_RE = re.compile(
+    r"\b(?:BlobServiceClient|BlobContainerClient|AmazonS3Client)\b",
+    re.IGNORECASE,
+)
+# Evidence that another cloud-service SDK client (secrets, key vault, tables, and similar) is used
+# -- technology-specific type names.
+CLOUD_SERVICE_REGISTRATION_RE = re.compile(
+    r"\b(?:SecretClient|KeyVaultClient|TableServiceClient|AmazonDynamoDBClient)\b",
+    re.IGNORECASE,
+)
 
 
 class ScanError(RuntimeError):
@@ -123,6 +152,13 @@ def _supported(path: str) -> bool:
     return path.lower().endswith(tuple(SUPPORTED_EXTENSIONS))
 
 
+def _is_container_shape_evidence(filename: str) -> bool:
+    # Deliberately filename-only, not content-based: a content marker like IHandleMessages or
+    # BackgroundService appears on every one of a project's many handler/job classes, not just its
+    # entry point, and including all of them would crowd out real dependency evidence in the bundle.
+    return filename in CONTAINER_SHAPE_FILENAMES or filename.endswith(".csproj")
+
+
 def _candidate(path: str, content: str) -> bool:
     lowered = path.lower()
     filename = lowered.rsplit("/", 1)[-1]
@@ -131,10 +167,14 @@ def _candidate(path: str, content: str) -> bool:
         or bool(CLIENT_CONSTRUCTION_RE.search(content))
         or bool(GENERIC_CLIENT_REGISTRATION_RE.search(content))
         or bool(CACHE_REGISTRATION_RE.search(content))
+        or bool(DATABASE_REGISTRATION_RE.search(content))
+        or bool(MESSAGE_BROKER_REGISTRATION_RE.search(content))
+        or bool(OBJECT_STORAGE_REGISTRATION_RE.search(content))
+        or bool(CLOUD_SERVICE_REGISTRATION_RE.search(content))
     )
     is_proto_service = lowered.endswith(".proto") and bool(PROTO_SERVICE_RE.search(content))
     is_api_configuration = filename in CONFIG_NAMES and bool(API_INTEGRATION_RE.search(content))
-    return is_registration or is_proto_service or is_api_configuration
+    return is_registration or is_proto_service or is_api_configuration or _is_container_shape_evidence(filename)
 
 
 def _priority(path: str, content: str) -> tuple[int, str]:
@@ -145,10 +185,17 @@ def _priority(path: str, content: str) -> tuple[int, str]:
         or CLIENT_CONSTRUCTION_RE.search(content)
         or GENERIC_CLIENT_REGISTRATION_RE.search(content)
         or CACHE_REGISTRATION_RE.search(content)
+        or DATABASE_REGISTRATION_RE.search(content)
+        or MESSAGE_BROKER_REGISTRATION_RE.search(content)
+        or OBJECT_STORAGE_REGISTRATION_RE.search(content)
+        or CLOUD_SERVICE_REGISTRATION_RE.search(content)
         or filename in CONFIG_NAMES
+        or _is_container_shape_evidence(filename)
     ):
         return (0, lowered)
-    if filename.rsplit(".", 1)[0].endswith(("client", "connector", "gateway", "producer", "consumer")):
+    if filename.rsplit(".", 1)[0].endswith(
+        ("client", "connector", "gateway", "producer", "consumer", "repository", "dbcontext")
+    ):
         return (1, lowered)
     return (2, lowered)
 

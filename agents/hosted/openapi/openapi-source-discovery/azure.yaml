@@ -22,6 +22,9 @@ services:
         cpu: "0.5"
         memory: 1Gi
     description: Scans one GitHub repository path and returns API files with the DTO source files needed to describe their payloads.
+    environmentVariables:
+      - name: GITHUB_READ_TOKEN
+        value: ${{connections.openapi-pr-github.credentials.github_token}}
     kind: hosted
     name: openapi-source-discovery
     displayName: OpenAPI Source Discovery

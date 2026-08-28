@@ -5,7 +5,10 @@ import unittest
 from github_pr import PublicationError, parse_request, publish
 
 
-CATALOG = {"repository": "source/app", "ref": "main", "path": "src", "dependencies": []}
+CATALOG = {
+    "repository": "source/app", "ref": "main", "path": "src",
+    "systemName": "App", "containers": [], "dependencies": [],
+}
 
 
 def payload():
@@ -74,6 +77,26 @@ class PublisherTests(unittest.TestCase):
         request["manifestFile"] = {"path": "manifest.json", "content": []}
         result = publish(request, FakeClient(), branch_factory=lambda: "service-dependencies/manifest")
         self.assertEqual(2, len(result["filesWritten"]))
+
+    def test_puml_is_written_alongside_the_catalog_at_a_derived_path(self):
+        request = payload()
+        request["catalogs"][0]["puml"] = "@startuml\n@enduml"
+        result = publish(request, FakeClient(), branch_factory=lambda: "service-dependencies/puml")
+        paths = [item["path"] for item in result["filesWritten"]]
+        self.assertEqual(
+            ["app/service-dependencies/service-dependencies.json", "app/service-dependencies/service-dependencies.puml"],
+            paths,
+        )
+
+    def test_puml_is_optional(self):
+        result = publish(payload(), FakeClient(), branch_factory=lambda: "service-dependencies/no-puml")
+        self.assertEqual(1, len(result["filesWritten"]))
+
+    def test_rejects_a_non_string_puml(self):
+        request = payload()
+        request["catalogs"][0]["puml"] = 12345
+        with self.assertRaisesRegex(PublicationError, "puml must be a string"):
+            publish(request, FakeClient())
 
     def test_parse_requires_json_object(self):
         with self.assertRaisesRegex(PublicationError, "one JSON object"):

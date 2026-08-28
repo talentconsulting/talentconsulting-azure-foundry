@@ -137,6 +137,7 @@ class ManifestTests(unittest.TestCase):
         result = run_manifest(
             object(),
             {"sourceUrl": MANIFEST_URL},
+            "discovery",
             "workflow",
             "publisher",
             "gpt-4o",
@@ -153,8 +154,11 @@ class ManifestTests(unittest.TestCase):
 
         def invoke(project, name, model, payload, max_attempts=2):
             calls.append((name, payload, max_attempts))
+            if name == "discovery":
+                return [{"apiFile": API_FILE, "supportingFiles": []}]
             if name == "workflow":
                 self.assertTrue(payload["deferPublication"])
+                self.assertEqual([{"apiFile": API_FILE, "supportingFiles": []}], payload["apiFiles"])
                 return {
                     "success": True,
                     "specifications": [{"apiFile": API_FILE, "specification": SPEC}],
@@ -172,6 +176,7 @@ class ManifestTests(unittest.TestCase):
         result = run_manifest(
             object(),
             {"sourceUrl": MANIFEST_URL},
+            "discovery",
             "workflow",
             "publisher",
             "gpt-4o",
@@ -181,10 +186,12 @@ class ManifestTests(unittest.TestCase):
         )
         self.assertTrue(result["success"])
         self.assertEqual(1, result["generatedRepositoryCount"])
-        self.assertEqual(["workflow", "publisher"], [call[0] for call in calls])
+        self.assertEqual(["discovery", "workflow", "publisher"], [call[0] for call in calls])
 
     def test_a_partial_generation_failure_still_publishes_the_successful_specs(self):
         def invoke(project, name, model, payload, max_attempts=2):
+            if name == "discovery":
+                return [{"apiFile": API_FILE, "supportingFiles": []}]
             if name == "workflow":
                 return {
                     "success": True,
@@ -199,6 +206,7 @@ class ManifestTests(unittest.TestCase):
         result = run_manifest(
             object(),
             {"sourceUrl": MANIFEST_URL},
+            "discovery",
             "workflow",
             "publisher",
             "gpt-4o",
@@ -216,19 +224,23 @@ class ManifestTests(unittest.TestCase):
         second[0]["github-repo"] = "https://github.com/source/events-only"
 
         def invoke(project, name, model, payload, max_attempts=2):
-            if name == "workflow":
+            if name == "discovery":
                 if payload["sourceUrl"].startswith("https://github.com/source/events-only"):
-                    return {"success": True, "specifications": []}
+                    return []
+                return [{"apiFile": API_FILE, "supportingFiles": []}]
+            if name == "workflow":
                 return {"success": True, "specifications": [{"apiFile": API_FILE, "specification": SPEC}]}
             self.assertEqual("publisher", name)
             self.assertEqual(1, len(payload["specifications"]))
             for node in payload["manifestFile"]["content"]:
                 self.assertEqual(NEW_SHA, node["specs"]["last-commit-hash-scanned"])
+                self.assertNotIn("in-progress", node["specs"])
             return {"success": True, "status": "created", "pullRequestUrl": "https://github.com/target/specs/pull/2"}
 
         result = run_manifest(
             object(),
             {"sourceUrl": MANIFEST_URL},
+            "discovery",
             "workflow",
             "publisher",
             "gpt-4o",
@@ -243,11 +255,14 @@ class ManifestTests(unittest.TestCase):
 
     def test_generation_failure_does_not_update_or_publish(self):
         def invoke(project, name, model, payload, max_attempts=2):
+            if name == "discovery":
+                return [{"apiFile": API_FILE, "supportingFiles": []}]
             return {"success": False, "generationErrors": [{"apiFile": API_FILE}]}
 
         result = run_manifest(
             object(),
             {"sourceUrl": MANIFEST_URL},
+            "discovery",
             "workflow",
             "publisher",
             "gpt-4o",
@@ -261,6 +276,8 @@ class ManifestTests(unittest.TestCase):
 
     def test_a_failure_with_no_generation_errors_surfaces_the_top_level_error_detail(self):
         def invoke(project, name, model, payload, max_attempts=2):
+            if name == "discovery":
+                return [{"apiFile": API_FILE, "supportingFiles": []}]
             return {
                 "success": False,
                 "generationErrors": [],
@@ -270,6 +287,7 @@ class ManifestTests(unittest.TestCase):
         result = run_manifest(
             object(),
             {"sourceUrl": MANIFEST_URL},
+            "discovery",
             "workflow",
             "publisher",
             "gpt-4o",
@@ -278,6 +296,143 @@ class ManifestTests(unittest.TestCase):
             invoker=invoke,
         )
         self.assertIn("Discovery returned more than 100 APIs.", result["failures"][0]["message"])
+
+    def test_a_large_repository_is_processed_in_batches_across_multiple_runs(self):
+        all_files = [
+            {"apiFile": f"https://github.com/source/app/blob/main/src/Api/Controller{i}.cs", "supportingFiles": []}
+            for i in range(5)
+        ]
+
+        def invoke_first(project, name, model, payload, max_attempts=2):
+            if name == "discovery":
+                return all_files
+            if name == "workflow":
+                self.assertEqual(all_files[:2], payload["apiFiles"])
+                return {
+                    "success": True,
+                    "specifications": [{"apiFile": item["apiFile"], "specification": SPEC} for item in all_files[:2]],
+                }
+            self.assertEqual("publisher", name)
+            node = payload["manifestFile"]["content"][0]["specs"]
+            self.assertEqual("", node["last-commit-hash-scanned"])
+            self.assertEqual({"commit": NEW_SHA, "completed-files": 2}, node["in-progress"])
+            return {"success": True, "status": "created", "pullRequestUrl": "https://github.com/target/specs/pull/1"}
+
+        first_manifest = manifest("")
+        first_result = run_manifest(
+            object(),
+            {"sourceUrl": MANIFEST_URL},
+            "discovery",
+            "workflow",
+            "publisher",
+            "gpt-4o",
+            batch_size=2,
+            manifest_loader=lambda blob: first_manifest,
+            commit_resolver=lambda entry: NEW_SHA,
+            invoker=invoke_first,
+        )
+        self.assertTrue(first_result["success"])
+        self.assertEqual(2, first_result["generatedRepositories"][0]["filesCompleted"])
+        self.assertEqual(5, first_result["generatedRepositories"][0]["filesTotal"])
+
+        resumed_manifest = manifest("")
+        resumed_manifest[0]["specs"]["in-progress"] = {"commit": NEW_SHA, "completed-files": 2}
+
+        def invoke_second(project, name, model, payload, max_attempts=2):
+            if name == "discovery":
+                return all_files
+            if name == "workflow":
+                self.assertEqual(all_files[2:4], payload["apiFiles"])
+                return {
+                    "success": True,
+                    "specifications": [{"apiFile": item["apiFile"], "specification": SPEC} for item in all_files[2:4]],
+                }
+            self.assertEqual("publisher", name)
+            node = payload["manifestFile"]["content"][0]["specs"]
+            self.assertEqual({"commit": NEW_SHA, "completed-files": 4}, node["in-progress"])
+            return {"success": True, "status": "created", "pullRequestUrl": "https://github.com/target/specs/pull/2"}
+
+        second_result = run_manifest(
+            object(),
+            {"sourceUrl": MANIFEST_URL},
+            "discovery",
+            "workflow",
+            "publisher",
+            "gpt-4o",
+            batch_size=2,
+            manifest_loader=lambda blob: resumed_manifest,
+            commit_resolver=lambda entry: NEW_SHA,
+            invoker=invoke_second,
+        )
+        self.assertTrue(second_result["success"])
+        self.assertEqual(4, second_result["generatedRepositories"][0]["filesCompleted"])
+
+        final_manifest = manifest("")
+        final_manifest[0]["specs"]["in-progress"] = {"commit": NEW_SHA, "completed-files": 4}
+
+        def invoke_third(project, name, model, payload, max_attempts=2):
+            if name == "discovery":
+                return all_files
+            if name == "workflow":
+                self.assertEqual(all_files[4:], payload["apiFiles"])
+                return {
+                    "success": True,
+                    "specifications": [{"apiFile": item["apiFile"], "specification": SPEC} for item in all_files[4:]],
+                }
+            self.assertEqual("publisher", name)
+            node = payload["manifestFile"]["content"][0]["specs"]
+            self.assertEqual(NEW_SHA, node["last-commit-hash-scanned"])
+            self.assertNotIn("in-progress", node)
+            return {"success": True, "status": "created", "pullRequestUrl": "https://github.com/target/specs/pull/3"}
+
+        third_result = run_manifest(
+            object(),
+            {"sourceUrl": MANIFEST_URL},
+            "discovery",
+            "workflow",
+            "publisher",
+            "gpt-4o",
+            batch_size=2,
+            manifest_loader=lambda blob: final_manifest,
+            commit_resolver=lambda entry: NEW_SHA,
+            invoker=invoke_third,
+        )
+        self.assertTrue(third_result["success"])
+        self.assertEqual(5, third_result["generatedRepositories"][0]["filesCompleted"])
+
+    def test_a_new_upstream_commit_restarts_a_batch_in_progress(self):
+        all_files = [
+            {"apiFile": f"https://github.com/source/app/blob/main/src/Api/Controller{i}.cs", "supportingFiles": []}
+            for i in range(3)
+        ]
+        stale_manifest = manifest()
+        stale_manifest[0]["specs"]["in-progress"] = {"commit": OLD_SHA, "completed-files": 2}
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "discovery":
+                return all_files
+            if name == "workflow":
+                self.assertEqual(all_files[:2], payload["apiFiles"])
+                return {
+                    "success": True,
+                    "specifications": [{"apiFile": item["apiFile"], "specification": SPEC} for item in all_files[:2]],
+                }
+            return {"success": True, "status": "created", "pullRequestUrl": "https://github.com/target/specs/pull/1"}
+
+        result = run_manifest(
+            object(),
+            {"sourceUrl": MANIFEST_URL},
+            "discovery",
+            "workflow",
+            "publisher",
+            "gpt-4o",
+            batch_size=2,
+            manifest_loader=lambda blob: stale_manifest,
+            commit_resolver=lambda entry: NEW_SHA,
+            invoker=invoke,
+        )
+        self.assertTrue(result["success"])
+        self.assertEqual(2, result["generatedRepositories"][0]["filesCompleted"])
 
 
 if __name__ == "__main__":

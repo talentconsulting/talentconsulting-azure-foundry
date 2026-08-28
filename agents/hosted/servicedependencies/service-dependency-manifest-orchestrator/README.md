@@ -1,6 +1,6 @@
 # Service Dependency Manifest Orchestrator
 
-Reads a shared public GitHub manifest, selects only `service-dependencies` nodes, compares branch-head commits, runs complete deferred service-dependency workflows, and publishes generated catalogs plus updated commit hashes in one pull request.
+Reads a shared public GitHub manifest, selects only `service-dependencies` nodes, compares branch-head commits, runs complete deferred service-dependency workflows, and publishes generated catalogs plus updated commit hashes in one pull request. Each workflow's C4-PlantUML diagram is forwarded to the publisher alongside its catalog when present.
 
 ```json
 {"sourceUrl":"https://github.com/talentconsulting/service-catalogue-data/blob/main/manifest.json"}

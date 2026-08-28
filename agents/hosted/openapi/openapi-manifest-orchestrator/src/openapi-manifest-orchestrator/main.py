@@ -23,10 +23,12 @@ from orchestrator import ManifestError, parse_request, run_manifest
 logger = logging.getLogger(__name__)
 PROJECT_ENDPOINT = os.getenv("FOUNDRY_PROJECT_ENDPOINT") or os.getenv("AZURE_AI_PROJECT_ENDPOINT")
 MODEL = os.getenv("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-4o")
+DISCOVERY_NAME = os.getenv("DISCOVERY_AGENT_NAME", "openapi-source-discovery")
 WORKFLOW_NAME = os.getenv("SPEC_WORKFLOW_AGENT_NAME", "openapi-spec-workflow")
 PUBLISHER_NAME = os.getenv("SPEC_PR_CREATOR_AGENT_NAME", "openapi-spec-pr-creator")
 MAX_ENTRIES = int(os.getenv("OPENAPI_MANIFEST_MAX_ENTRIES", "25"))
 MAX_SPECS = int(os.getenv("OPENAPI_MANIFEST_MAX_SPECS", "100"))
+BATCH_SIZE = int(os.getenv("OPENAPI_MANIFEST_BATCH_SIZE", "30"))
 if not PROJECT_ENDPOINT:
     raise EnvironmentError("FOUNDRY_PROJECT_ENDPOINT is required.")
 
@@ -72,11 +74,13 @@ async def handle_create(
             run_manifest,
             project_client,
             payload,
+            DISCOVERY_NAME,
             WORKFLOW_NAME,
             PUBLISHER_NAME,
             MODEL,
             MAX_ENTRIES,
             MAX_SPECS,
+            BATCH_SIZE,
         )
     except Exception as error:
         logger.exception("Manifest-driven OpenAPI orchestration failed.")

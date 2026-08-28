@@ -1,0 +1,19 @@
+name: Check Dependabot Alerts
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  check-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Dependabot alerts for every manifest repository
+        env:
+          DEPENDABOT_ALERTS_TOKEN: ${{ secrets.DEPENDABOT_ALERTS_TOKEN }}
+          GITHUB_PR_TOKEN: ${{ secrets.GITHUB_PR_TOKEN }}
+        run: python3 scripts/check_dependabot_alerts.py

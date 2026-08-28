@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import re
 import urllib.error
 import urllib.parse
@@ -14,6 +15,10 @@ from typing import Any, Callable
 
 MAX_MANIFEST_BYTES = 1024 * 1024
 COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
+# Authenticated GitHub requests get a 5,000/hour rate limit instead of the 60/hour anonymous
+# limit that a repeatedly-invoked orchestrator (checking commit hashes for every entry, every
+# run) can exhaust quickly. Reuses the same PAT the PR-creator agents already hold for writes.
+GITHUB_TOKEN = os.getenv("GITHUB_READ_TOKEN")
 
 
 class ManifestError(ValueError):
@@ -43,6 +48,8 @@ class ManifestEntry:
     scan_path: str
     path_to_scan: str
     last_commit: str
+    in_progress_commit: str | None = None
+    completed_files: int = 0
 
     @property
     def source_url(self) -> str:
@@ -92,7 +99,10 @@ def parse_blob_url(value: str) -> GitHubBlob:
 
 
 def _read_url(url: str) -> bytes:
-    request = urllib.request.Request(url, headers={"User-Agent": "openapi-manifest-orchestrator"})
+    headers = {"User-Agent": "openapi-manifest-orchestrator"}
+    if GITHUB_TOKEN:
+        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+    request = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             declared_size = int(response.headers.get("Content-Length", "0") or "0")
@@ -163,7 +173,8 @@ def validate_manifest(value: object, max_entries: int) -> list[ManifestEntry]:
         if "github-repo" not in item:
             raise ManifestError("invalid_manifest", f"Manifest entry {index} has an invalid shape.")
         specs = item["specs"]
-        if not isinstance(specs, dict) or set(specs) != {"path-to-scan", "last-commit-hash-scanned"}:
+        required_keys = {"path-to-scan", "last-commit-hash-scanned"}
+        if not isinstance(specs, dict) or not required_keys.issubset(specs) or not set(specs) <= required_keys | {"in-progress"}:
             raise ManifestError("invalid_manifest", f"Manifest entry {index}.specs has an invalid shape.")
         owner, repository, repository_url = _parse_repository(item["github-repo"], f"Manifest entry {index}.github-repo")
         path_to_scan = specs["path-to-scan"]
@@ -181,6 +192,24 @@ def validate_manifest(value: object, max_entries: int) -> list[ManifestEntry]:
                 "invalid_manifest",
                 f"Manifest entry {index}.last-commit-hash-scanned must be empty or a 40-character lowercase SHA.",
             )
+        in_progress = specs.get("in-progress")
+        in_progress_commit: str | None = None
+        completed_files = 0
+        if in_progress is not None:
+            if not isinstance(in_progress, dict) or set(in_progress) != {"commit", "completed-files"}:
+                raise ManifestError("invalid_manifest", f"Manifest entry {index}.specs.in-progress has an invalid shape.")
+            in_progress_commit = in_progress["commit"]
+            if not isinstance(in_progress_commit, str) or not COMMIT_PATTERN.fullmatch(in_progress_commit):
+                raise ManifestError(
+                    "invalid_manifest",
+                    f"Manifest entry {index}.specs.in-progress.commit must be a 40-character lowercase SHA.",
+                )
+            completed_files = in_progress["completed-files"]
+            if not isinstance(completed_files, int) or isinstance(completed_files, bool) or completed_files < 0:
+                raise ManifestError(
+                    "invalid_manifest",
+                    f"Manifest entry {index}.specs.in-progress.completed-files must be a non-negative integer.",
+                )
         repository_name = f"{owner}/{repository}"
         if repository_name in repositories:
             raise ManifestError("invalid_manifest", f"Manifest repository {repository_name} is duplicated.")
@@ -195,6 +224,8 @@ def validate_manifest(value: object, max_entries: int) -> list[ManifestEntry]:
                 scan_path="/".join(path_parts[2:]),
                 path_to_scan="/".join(path_parts),
                 last_commit=last_commit,
+                in_progress_commit=in_progress_commit,
+                completed_files=completed_files,
             )
         )
     return entries
@@ -330,14 +361,28 @@ def _validate_deferred_output(value: Any, entry: ManifestEntry) -> tuple[list[di
     return validated, warnings
 
 
+def _validate_discovered_files(value: Any, entry: ManifestEntry) -> list[dict[str, Any]]:
+    if isinstance(value, dict) and isinstance(value.get("error"), dict):
+        error = value["error"]
+        raise ManifestError(
+            str(error.get("code", "discovery_failed")),
+            str(error.get("message", f"Source discovery failed for {entry.repository_name}.")),
+        )
+    if not isinstance(value, list):
+        raise ManifestError("invalid_discovery_output", f"Discovery returned an invalid response for {entry.repository_name}.")
+    return value
+
+
 def run_manifest(
     project: Any,
     request: dict[str, str],
+    discovery_name: str,
     workflow_name: str,
     publisher_name: str,
     model: str,
     max_entries: int = 25,
     max_specs: int = 100,
+    batch_size: int = 30,
     manifest_loader: Callable[[GitHubBlob], object] = download_manifest,
     commit_resolver: Callable[[ManifestEntry], str] = latest_commit,
     invoker: Callable[..., Any] = invoke_agent,
@@ -382,21 +427,48 @@ def run_manifest(
         }
 
     combined_specs: list[dict[str, Any]] = []
-    generated_repositories: list[dict[str, str]] = []
+    generated_repositories: list[dict[str, Any]] = []
     for entry, commit in changed:
         try:
-            workflow_result = invoker(
-                project,
-                workflow_name,
-                model,
-                {"sourceUrl": entry.source_url, "deferPublication": True},
+            discovered = _validate_discovered_files(
+                invoker(project, discovery_name, model, {"sourceUrl": entry.source_url}),
+                entry,
             )
-            specifications, warnings = _validate_deferred_output(workflow_result, entry)
+            total = len(discovered)
+            # A repository too large to generate in one call resumes from where the last run left
+            # off (tracked in the manifest as in-progress), but only if that progress was recorded
+            # against this SAME commit -- a new upstream commit always restarts the batch from zero
+            # rather than mixing specs generated from two different commits.
+            offset = entry.completed_files if entry.in_progress_commit == commit else 0
+            batch = discovered[offset : offset + batch_size]
+            specifications: list[dict[str, Any]] = []
+            warnings: list[dict[str, Any]] = []
+            if batch:
+                workflow_result = invoker(
+                    project,
+                    workflow_name,
+                    model,
+                    {"sourceUrl": entry.source_url, "deferPublication": True, "apiFiles": batch},
+                )
+                specifications, warnings = _validate_deferred_output(workflow_result, entry)
             if len(combined_specs) + len(specifications) > max_specs:
                 raise ManifestError("too_many_specifications", f"A run may publish at most {max_specs} specs.")
             combined_specs.extend(specifications)
-            updated_manifest[entry.index]["specs"]["last-commit-hash-scanned"] = commit
-            generated_repositories.append({"repository": entry.repository_name, "commit": commit, "warnings": warnings})
+            completed = min(offset + len(batch), total)
+            if completed >= total:
+                updated_manifest[entry.index]["specs"]["last-commit-hash-scanned"] = commit
+                updated_manifest[entry.index]["specs"].pop("in-progress", None)
+            else:
+                updated_manifest[entry.index]["specs"]["in-progress"] = {"commit": commit, "completed-files": completed}
+            generated_repositories.append(
+                {
+                    "repository": entry.repository_name,
+                    "commit": commit,
+                    "warnings": warnings,
+                    "filesCompleted": completed,
+                    "filesTotal": total,
+                }
+            )
         except Exception as error:
             failures.append(
                 {

@@ -25,6 +25,8 @@ services:
     environmentVariables:
       - name: AZURE_AI_MODEL_DEPLOYMENT_NAME
         value: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
+      - name: DISCOVERY_AGENT_NAME
+        value: ${DISCOVERY_AGENT_NAME}
       - name: SPEC_WORKFLOW_AGENT_NAME
         value: ${SPEC_WORKFLOW_AGENT_NAME}
       - name: SPEC_PR_CREATOR_AGENT_NAME
@@ -33,6 +35,10 @@ services:
         value: ${OPENAPI_MANIFEST_MAX_ENTRIES}
       - name: OPENAPI_MANIFEST_MAX_SPECS
         value: ${OPENAPI_MANIFEST_MAX_SPECS}
+      - name: OPENAPI_MANIFEST_BATCH_SIZE
+        value: ${OPENAPI_MANIFEST_BATCH_SIZE}
+      - name: GITHUB_READ_TOKEN
+        value: ${{connections.openapi-pr-github.credentials.github_token}}
     kind: hosted
     name: openapi-manifest-orchestrator
     displayName: OpenAPI Manifest Orchestrator

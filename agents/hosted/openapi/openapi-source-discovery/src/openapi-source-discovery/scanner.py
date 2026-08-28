@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import os
 import re
 import urllib.error
 import urllib.parse
@@ -10,6 +11,11 @@ import urllib.request
 import zipfile
 from collections import deque
 from dataclasses import dataclass
+
+
+# Authenticated GitHub requests get a much higher rate limit than the 60/hour anonymous limit.
+# Reuses the same PAT the PR-creator agents already hold for writes.
+GITHUB_TOKEN = os.getenv("GITHUB_READ_TOKEN")
 
 
 class ScanError(RuntimeError):
@@ -125,9 +131,12 @@ def _download_sources(location: SourceLocation) -> dict[str, str]:
     owner = urllib.parse.quote(location.owner, safe="")
     repository = urllib.parse.quote(location.repository, safe="")
     ref = urllib.parse.quote(location.ref, safe="")
+    headers = {"User-Agent": "openapi-source-discovery"}
+    if GITHUB_TOKEN:
+        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
     request = urllib.request.Request(
         f"https://codeload.github.com/{owner}/{repository}/zip/{ref}",
-        headers={"User-Agent": "openapi-source-discovery"},
+        headers=headers,
     )
     try:
         with urllib.request.urlopen(request, timeout=120) as response:

@@ -1,4 +1,5 @@
 import json
+import threading
 import unittest
 import urllib.error
 from io import BytesIO
@@ -10,7 +11,11 @@ from orchestrator import ManifestEntry, ManifestError, _read_url, latest_commit,
 MANIFEST_URL = "https://github.com/target/catalogs/blob/main/manifest.json"
 OLD_SHA = "1" * 40
 NEW_SHA = "2" * 40
-CATALOG = {"repository": "source/app", "ref": "main", "path": "src", "dependencies": [{"name": "Accounts API"}]}
+CATALOG = {
+    "repository": "source/app", "ref": "main", "path": "src", "systemName": "App",
+    "containers": [{"id": "app", "name": "App", "type": "api", "evidence": []}],
+    "dependencies": [{"sourceId": "app", "name": "Accounts API"}],
+}
 
 
 def manifest(last_commit=OLD_SHA):
@@ -106,6 +111,60 @@ class ManifestTests(unittest.TestCase):
         )
         self.assertTrue(result["success"])
         self.assertEqual(["workflow", "publisher"], [call[0] for call in calls])
+
+    def test_puml_diagram_passes_through_to_the_publisher_when_present(self):
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "workflow":
+                return {
+                    "success": True,
+                    "catalogs": [{"sourceUrl": payload["sourceUrl"], "catalog": CATALOG, "puml": "@startuml\n@enduml\n"}],
+                }
+            self.assertEqual("@startuml\n@enduml\n", payload["catalogs"][0]["puml"])
+            return {"success": True, "status": "created"}
+
+        result = run_manifest(
+            object(), {"sourceUrl": MANIFEST_URL}, "workflow", "publisher", "gpt-4o",
+            manifest_loader=lambda blob: manifest(), commit_resolver=lambda entry: NEW_SHA, invoker=invoke,
+        )
+        self.assertTrue(result["success"])
+
+    def test_missing_puml_is_tolerated_for_backward_compatibility(self):
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "workflow":
+                return {"success": True, "catalogs": [{"sourceUrl": payload["sourceUrl"], "catalog": CATALOG}]}
+            self.assertNotIn("puml", payload["catalogs"][0])
+            return {"success": True, "status": "created"}
+
+        result = run_manifest(
+            object(), {"sourceUrl": MANIFEST_URL}, "workflow", "publisher", "gpt-4o",
+            manifest_loader=lambda blob: manifest(), commit_resolver=lambda entry: NEW_SHA, invoker=invoke,
+        )
+        self.assertTrue(result["success"])
+
+    def test_repositories_are_generated_concurrently(self):
+        two_repo_manifest = manifest() + [{
+            "github-repo": "https://github.com/source/other",
+            "service-dependencies": {"path-to-scan": "tree/main/src", "last-commit-hash-scanned": ""},
+        }]
+        barrier = threading.Barrier(2, timeout=5)
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name != "workflow":
+                return {"success": True, "status": "created"}
+            # Only releases once both repositories' workflow calls have reached this point at the
+            # same time -- if they ran one at a time, this would time out and break the barrier.
+            barrier.wait()
+            repository = "/".join(payload["sourceUrl"].split("/")[3:5])
+            catalog = json.loads(json.dumps(CATALOG))
+            catalog["repository"] = repository
+            return {"success": True, "catalogs": [{"sourceUrl": payload["sourceUrl"], "catalog": catalog}]}
+
+        result = run_manifest(
+            object(), {"sourceUrl": MANIFEST_URL}, "workflow", "publisher", "gpt-4o",
+            manifest_loader=lambda blob: two_repo_manifest, commit_resolver=lambda entry: NEW_SHA, invoker=invoke,
+        )
+        self.assertTrue(result["success"])
+        self.assertEqual(2, result["generatedRepositoryCount"])
 
     def test_generation_failure_does_not_update_or_publish(self):
         def invoke(project, name, model, payload, max_attempts=2):
