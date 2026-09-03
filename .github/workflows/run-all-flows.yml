@@ -134,6 +134,7 @@ jobs:
             --tenant-id "$AZURE_TENANT_ID"
 
       - name: Run ${{ matrix.key }}
+        working-directory: ${{ matrix.project_dir }}
         shell: bash
         env:
           SOURCE_URL: ${{ matrix.source_url }}
