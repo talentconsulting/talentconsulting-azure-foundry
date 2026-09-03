@@ -1,0 +1,128 @@
+name: Run Manifest Orchestrator
+
+on:
+  workflow_dispatch:
+    inputs:
+      manifest_url:
+        description: "Manifest blob URL, e.g. https://github.com/owner/service-catalogue-data/blob/main/manifest.json"
+        required: true
+        type: string
+      flow:
+        description: "Which flow's manifest orchestrator to run"
+        required: true
+        type: choice
+        options:
+          - openapi
+          - dbschema
+          - eventcatalog
+          - service-dependency
+          - c4
+          - local-dev-config
+          - dotnet-version
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: run-manifest-orchestrator-${{ inputs.manifest_url }}-${{ inputs.flow }}
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.AZURE_AI_PROJECT_ENDPOINT }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve agent and project directory
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ inputs.flow }}" in
+            openapi) dir="openapi/openapi-manifest-orchestrator"; agent="openapi-manifest-orchestrator" ;;
+            dbschema) dir="dbschema/dbschema-manifest-orchestrator"; agent="dbschema-manifest-orchestrator" ;;
+            eventcatalog) dir="eventcatalog/eventcatalog-manifest-orchestrator"; agent="eventcatalog-manifest-orchestrator" ;;
+            service-dependency) dir="servicedependencies/service-dependency-manifest-orchestrator"; agent="service-dependency-manifest-orchestrator" ;;
+            c4) dir="c4/c4-manifest-orchestrator"; agent="c4-manifest-orchestrator" ;;
+            local-dev-config) dir="localdevconfig/local-dev-config-manifest-orchestrator"; agent="local-dev-config-manifest-orchestrator" ;;
+            dotnet-version) dir="dotnetversion/dotnet-version-manifest-orchestrator"; agent="dotnet-version-manifest-orchestrator" ;;
+            *) echo "::error::Unknown flow '${{ inputs.flow }}'"; exit 1 ;;
+          esac
+          echo "project_dir=agents/hosted/$dir" >> "$GITHUB_OUTPUT"
+          echo "agent=$agent" >> "$GITHUB_OUTPUT"
+
+      - name: Validate deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in AZURE_CLIENT_ID AZURE_TENANT_ID FOUNDRY_PROJECT_ENDPOINT; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing dev environment secret $name."
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - uses: Azure/setup-azd@v2
+
+      - name: Install Foundry extensions
+        run: azd extension install microsoft.foundry
+
+      - name: Sign in to azd with GitHub federated credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          azd auth login \
+            --client-id "$AZURE_CLIENT_ID" \
+            --federated-credential-provider "github" \
+            --tenant-id "$AZURE_TENANT_ID"
+
+      - name: Run ${{ inputs.flow }} manifest orchestrator
+        working-directory: ${{ steps.resolve.outputs.project_dir }}
+        shell: bash
+        env:
+          MANIFEST_URL: ${{ inputs.manifest_url }}
+        run: |
+          set -euo pipefail
+          payload=$(jq -n --arg sourceUrl "$MANIFEST_URL" '{sourceUrl: $sourceUrl}')
+          echo "Payload: $payload"
+          response_file="$RUNNER_TEMP/manifest-orchestrator-response.txt"
+          azd ai agent invoke "${{ steps.resolve.outputs.agent }}" "$payload" --no-prompt --output raw > "$response_file" 2>&1 || true
+          cat "$response_file"
+
+          # --output raw prints the full HTTP response as a Server-Sent-Events stream, not a
+          # single JSON document. The agent's actual JSON answer is the text field of the last
+          # "data:" event (response.completed).
+          last_data_line=$(grep '^data: ' "$response_file" | tail -1 || true)
+          if [ -z "$last_data_line" ]; then
+            echo "::error::No SSE 'data:' event found in azd output (see raw output above)."
+            exit 1
+          fi
+          agent_json_file="$RUNNER_TEMP/manifest-orchestrator-agent-response.json"
+          if ! printf '%s' "$last_data_line" | sed 's/^data: //' | jq -e '.response.output[0].content[0].text' > /dev/null 2>&1; then
+            echo "::error::Could not find the agent's response text in the SSE stream (see raw output above)."
+            exit 1
+          fi
+          printf '%s' "$last_data_line" | sed 's/^data: //' | jq -r '.response.output[0].content[0].text' > "$agent_json_file"
+
+          {
+            echo "### ${{ inputs.flow }} manifest orchestrator"
+            echo '```json'
+            cat "$agent_json_file"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if ! jq -e . >/dev/null 2>&1 < "$agent_json_file"; then
+            echo "::error::Agent response was not valid JSON."
+            exit 1
+          fi
+          if [ "$(jq -r '.success' "$agent_json_file")" != "true" ]; then
+            echo "::error::Manifest orchestrator reported success=false: $(jq -c '.failures // empty' "$agent_json_file")"
+            exit 1
+          fi
