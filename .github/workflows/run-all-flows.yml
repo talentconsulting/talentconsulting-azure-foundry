@@ -135,7 +135,10 @@ jobs:
 
       - name: Install Foundry extensions
         working-directory: ${{ matrix.project_dir }}
-        run: azd extension install azure.ai.agents
+        run: |
+          azd extension install azure.ai.agents
+          azd extension install azure.ai.projects
+          azd extension install microsoft.foundry
 
       - name: Configure existing Foundry project
         working-directory: ${{ matrix.project_dir }}
