@@ -21,7 +21,7 @@ services:
     description: Selects bounded source files that evidence C4 systems, containers, relationships, and infrastructure in one public GitHub repository path.
     environmentVariables:
       - name: GITHUB_READ_TOKEN
-        value: ${{connections.openapi-pr-github.credentials.github_token}}
+        value: ${{connections.github-source-read.credentials.github_token}}
     kind: hosted
     name: c4-source-discovery
     displayName: C4 Source Discovery

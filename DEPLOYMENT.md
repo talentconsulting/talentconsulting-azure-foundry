@@ -31,6 +31,19 @@ The PR creator resolves the token from `${{connections.openapi-pr-github.credent
 
 The database-schema PR creator reuses `openapi-pr-github`, because it publishes to the same catalogue repository with the same permissions. No second GitHub secret or Foundry connection is required.
 
+### Source-repository read connection
+
+Each `*-source-discovery` agent (`openapi`, `dbschema`, `eventcatalog`, `service-dependency`, `c4`, `local-dev-config`) downloads a GitHub archive of whatever repository `sourceUrl` points at, which can be any repository the pipeline is asked to analyze -- not just the destination catalogue repository. These agents previously reused `openapi-pr-github` for `GITHUB_READ_TOKEN`, but that connection is a fine-grained PAT deliberately scoped to write access on the destination catalogue repository only. Presenting it to an unrelated source repository doesn't fail closed with a clear permissions error -- GitHub returns a plain `404` for a token with no grant on that repository, which is indistinguishable from the repository not existing, even when it's public.
+
+Create a second Foundry Custom keys project connection named `github-source-read` with a `github_token` field holding a token that can read whatever source repositories the pipeline will be pointed at:
+
+- A classic PAT with the `public_repo` scope covers any public repository and raises the rate limit well above the 60 requests/hour anonymous limit.
+- If source repositories are private, use a fine-grained PAT with read-only `Contents` and `Metadata` access granted across the relevant organization(s)/repositories instead.
+
+Each `*-source-discovery` agent resolves `GITHUB_READ_TOKEN` from `${{connections.github-source-read.credentials.github_token}}`. `openapi-pr-github` remains scoped to writes on the destination catalogue repository only; nothing in this pipeline should reuse it for reading arbitrary source repositories.
+
+Note: the `*-manifest-orchestrator` agents also read `GITHUB_READ_TOKEN` (currently still `openapi-pr-github`), but only to fetch `manifest.json` from the same destination catalogue repository that token is already scoped to -- that usage is correctly scoped and doesn't need `github-source-read`. However, those orchestrators separately check each manifest entry's *source* repository branch-head commit via the GitHub API using the same token, which has the identical scoping problem described above; that call site is not yet updated to use `github-source-read`.
+
 Optional `dev` environment variables are:
 
 | Variable | Default |

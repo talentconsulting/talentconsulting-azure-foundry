@@ -21,7 +21,7 @@ services:
     description: Scans one GitHub repository path and returns files that can evidence the local services and configuration a repository needs to run locally.
     environmentVariables:
       - name: GITHUB_READ_TOKEN
-        value: ${{connections.openapi-pr-github.credentials.github_token}}
+        value: ${{connections.github-source-read.credentials.github_token}}
     kind: hosted
     name: local-dev-config-source-discovery
     displayName: Local Dev Config Source Discovery

@@ -14,7 +14,7 @@ services:
     description: Selects bounded, authoritative event and command catalog source files from one public GitHub repository path.
     environmentVariables:
       - name: GITHUB_READ_TOKEN
-        value: ${{connections.openapi-pr-github.credentials.github_token}}
+        value: ${{connections.github-source-read.credentials.github_token}}
     kind: hosted
     name: eventcatalog-source-discovery
     displayName: Event and Command Catalog Source Discovery
