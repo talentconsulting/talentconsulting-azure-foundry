@@ -47,12 +47,6 @@ jobs:
           done
           exit "$missing"
 
-      - uses: azure/login@v2
-        with:
-          client-id: ${{ env.AZURE_CLIENT_ID }}
-          tenant-id: ${{ env.AZURE_TENANT_ID }}
-          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
-
       - uses: Azure/setup-azd@v2
 
       - name: Install Foundry extensions
@@ -62,10 +56,14 @@ jobs:
           azd extension install azure.ai.projects
           azd extension install microsoft.foundry
 
-      - name: Configure azd authentication
+      - name: Sign in to azd with GitHub federated credentials
+        shell: bash
         run: |
-          azd config set auth.useAzCliAuth true
-          azd config set defaults.subscription "$AZURE_SUBSCRIPTION_ID"
+          set -euo pipefail
+          azd auth login \
+            --client-id "$AZURE_CLIENT_ID" \
+            --federated-credential-provider "github" \
+            --tenant-id "$AZURE_TENANT_ID"
 
       - name: Configure existing Foundry project
         working-directory: ${{ env.AGENT_PROJECT_DIR }}
