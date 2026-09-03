@@ -4,7 +4,8 @@ def flowdefs: {
   "eventcatalog": {"nodeKeys": ["eventcatalog", "event-catalog"], "agent": "eventcatalog-workflow", "project_dir": "agents/hosted/eventcatalog/eventcatalog-workflow"},
   "service-dependency": {"nodeKeys": ["service-dependencies"], "agent": "service-dependency-workflow", "project_dir": "agents/hosted/servicedependencies/service-dependency-workflow"},
   "c4": {"nodeKeys": ["c4"], "agent": "c4-workflow", "project_dir": "agents/hosted/c4/c4-workflow"},
-  "local-dev-config": {"nodeKeys": ["local-dev-config"], "agent": "local-dev-config-workflow", "project_dir": "agents/hosted/localdevconfig/local-dev-config-workflow"}
+  "local-dev-config": {"nodeKeys": ["local-dev-config"], "agent": "local-dev-config-workflow", "project_dir": "agents/hosted/localdevconfig/local-dev-config-workflow"},
+  "dotnet-version": {"nodeKeys": ["dotnet-version"], "agent": "dotnet-version-workflow", "project_dir": "agents/hosted/dotnetversion/dotnet-version-workflow"}
 };
 
 # Inputs: $repo (github-repo to match) and $keys (requested flow keys, or null for all).

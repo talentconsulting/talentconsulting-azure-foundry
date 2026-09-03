@@ -1,6 +1,6 @@
 # Source Control Agent Pipelines
 
-This repository contains Azure AI Foundry hosted agents for manifest-driven source analysis. The OpenAPI, database-schema, event/command-catalog, external-service-dependency, C4, and local-development-configuration pipelines generate repository artefacts and create one combined pull request for all successful manifest entries.
+This repository contains Azure AI Foundry hosted agents for manifest-driven source analysis. The OpenAPI, database-schema, event/command-catalog, external-service-dependency, C4, local-development-configuration, and .NET-version pipelines generate repository artefacts and create one combined pull request for all successful manifest entries.
 
 ## Pattern
 
@@ -103,6 +103,9 @@ The dependency order is:
 - `local-dev-config-source-discovery`, `local-dev-config-generator`, and `local-dev-config-pr-creator` are leaf agents.
 - `local-dev-config-workflow` depends on those three leaf agents.
 - `local-dev-config-manifest-orchestrator` depends on `local-dev-config-workflow` and `local-dev-config-pr-creator`.
+- `dotnet-version-source-discovery` and `dotnet-version-pr-creator` are leaf agents; `dotnet-version-generator` is also a leaf agent but is fully deterministic (no model call).
+- `dotnet-version-workflow` depends on those three leaf agents.
+- `dotnet-version-manifest-orchestrator` depends on `dotnet-version-workflow` and `dotnet-version-pr-creator`.
 
 Previous workflows, scripts, prompt agents, and documentation are retained under [`backup/`](backup/).
 
@@ -156,6 +159,20 @@ Previous workflows, scripts, prompt agents, and documentation are retained under
 }
 ```
 
+## .NET version orchestration
+
+[`dotnet-version-source-discovery`](agents/hosted/dotnetversion/dotnet-version-source-discovery/README.md) deterministically selects `.csproj` and `global.json` files, ignoring `bin`, `obj`, `packages`, and `node_modules`. [`dotnet-version-generator`](agents/hosted/dotnetversion/dotnet-version-generator/README.md) deterministically parses each file's XML/JSON directly -- no model is used -- into target framework and SDK version entries. [`dotnet-version-workflow`](agents/hosted/dotnetversion/dotnet-version-workflow/README.md) writes one `<repository>/dotnet-version/dotnet-version.json` file through [`dotnet-version-pr-creator`](agents/hosted/dotnetversion/dotnet-version-pr-creator/README.md), while [`dotnet-version-manifest-orchestrator`](agents/hosted/dotnetversion/dotnet-version-manifest-orchestrator/README.md) processes only `dotnet-version` nodes and combines changed repositories with the manifest update in one PR.
+
+```json
+{
+  "github-repo": "https://github.com/owner/application",
+  "dotnet-version": {
+    "path-to-scan": "tree/main/src",
+    "last-commit-hash-scanned": ""
+  }
+}
+```
+
 ## Run the complete workflow
 
 Invoke `openapi-spec-workflow` with:
@@ -175,13 +192,13 @@ Generated file paths are deterministic and flat. By default, `src/Api/BidsContro
 
 ## Run every flow against one repository
 
-[`.github/workflows/run-all-flows.yml`](.github/workflows/run-all-flows.yml) is a manual (`workflow_dispatch`) action that looks up one repository's entry in a manifest and invokes every `*-workflow` agent that has a node on that entry — OpenAPI, database schema, event/command catalog, service dependency, C4, and local dev config — in parallel. Each flow uses its own `path-to-scan` from the manifest entry (they are not all the same subdirectory), so, for example, `dbschema` might scan `src/Data` while `eventcatalog` scans `src/Application` for the same repository. The destination repository and base branch are derived from the manifest URL itself, matching the convention the `*-manifest-orchestrator` agents already use. Inputs:
+[`.github/workflows/run-all-flows.yml`](.github/workflows/run-all-flows.yml) is a manual (`workflow_dispatch`) action that looks up one repository's entry in a manifest and invokes every `*-workflow` agent that has a node on that entry — OpenAPI, database schema, event/command catalog, service dependency, C4, local dev config, and .NET version — in parallel. Each flow uses its own `path-to-scan` from the manifest entry (they are not all the same subdirectory), so, for example, `dbschema` might scan `src/Data` while `eventcatalog` scans `src/Application` for the same repository. The destination repository and base branch are derived from the manifest URL itself, matching the convention the `*-manifest-orchestrator` agents already use. Inputs:
 
 | Input | Required | Notes |
 | --- | --- | --- |
 | `manifest_url` | Yes | Manifest blob URL, e.g. `https://github.com/owner/service-catalogue-data/blob/main/manifest.json`. Its repository and branch become `targetRepository`/`targetBaseBranch`. |
 | `github_repo` | Yes | The exact `github-repo` value to match in the manifest, e.g. `https://github.com/owner/application`. |
-| `flows` | No | `all` (default) or a comma-separated subset of `openapi,dbschema,eventcatalog,service-dependency,c4,local-dev-config`. Only flows actually present on the matched entry ever run. |
+| `flows` | No | `all` (default) or a comma-separated subset of `openapi,dbschema,eventcatalog,service-dependency,c4,local-dev-config,dotnet-version`. Only flows actually present on the matched entry ever run. |
 | `defer_publication` | No | When `true`, generates artefacts without opening pull requests. |
 
 A `prepare` job resolves the manifest entry into a matrix (via [`.github/workflows/scripts/manifest-entry-flows.jq`](.github/workflows/scripts/manifest-entry-flows.jq)) and fails fast with a clear error if the repository or none of the requested flow nodes are found. Each matched flow then runs as its own matrix job with `fail-fast: false`, so one flow failing does not stop the others; results are written to the job summary. This runs the direct per-repository workflow agents (not the manifest orchestrators), so it does not update `last-commit-hash-scanned` in the manifest — it's for on-demand runs, not a replacement for the scheduled manifest orchestration.
@@ -303,6 +320,25 @@ cd ../local-dev-config-manifest-orchestrator
 azd deploy local-dev-config-manifest-orchestrator --no-prompt
 ```
 
+The dotnet-version agents use the same dependency order:
+
+```bash
+cd agents/hosted/dotnetversion/dotnet-version-source-discovery
+azd deploy dotnet-version-source-discovery --no-prompt
+
+cd ../dotnet-version-generator
+azd deploy dotnet-version-generator --no-prompt
+
+cd ../dotnet-version-pr-creator
+azd deploy dotnet-version-pr-creator --no-prompt
+
+cd ../dotnet-version-workflow
+azd deploy dotnet-version-workflow --no-prompt
+
+cd ../dotnet-version-manifest-orchestrator
+azd deploy dotnet-version-manifest-orchestrator --no-prompt
+```
+
 ## Test
 
 ```bash
@@ -335,4 +371,9 @@ python3 -m unittest discover -s agents/hosted/localdevconfig/local-dev-config-ge
 python3 -m unittest discover -s agents/hosted/localdevconfig/local-dev-config-pr-creator/src/local-dev-config-pr-creator -p 'test_*.py'
 python3 -m unittest discover -s agents/hosted/localdevconfig/local-dev-config-workflow/src/local-dev-config-workflow -p 'test_*.py'
 python3 -m unittest discover -s agents/hosted/localdevconfig/local-dev-config-manifest-orchestrator/src/local-dev-config-manifest-orchestrator -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/dotnetversion/dotnet-version-source-discovery/src/dotnet-version-source-discovery -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/dotnetversion/dotnet-version-generator/src/dotnet-version-generator -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/dotnetversion/dotnet-version-pr-creator/src/dotnet-version-pr-creator -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/dotnetversion/dotnet-version-workflow/src/dotnet-version-workflow -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/dotnetversion/dotnet-version-manifest-orchestrator/src/dotnet-version-manifest-orchestrator -p 'test_*.py'
 ```

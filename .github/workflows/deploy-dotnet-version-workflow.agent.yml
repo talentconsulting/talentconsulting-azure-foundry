@@ -1,0 +1,19 @@
+name: Deploy .NET Version Workflow
+
+on:
+  push:
+    paths:
+      - "agents/hosted/dotnetversion/dotnet-version-workflow/**"
+      - ".github/workflows/deploy-dotnet-version-workflow.agent.yml"
+      - ".github/workflows/deploy-dotnet-version-agent.reusable.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    if: github.event_name != 'push' || github.ref_name == github.event.repository.default_branch
+    uses: ./.github/workflows/deploy-dotnet-version-agent.reusable.yml
+    with:
+      project_dir: agents/hosted/dotnetversion/dotnet-version-workflow
+      service_name: dotnet-version-workflow
+      expected_marker: invalid_source_url
+    secrets: inherit

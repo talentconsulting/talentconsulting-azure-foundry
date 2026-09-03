@@ -1,0 +1,19 @@
+name: Deploy .NET Version Generator
+
+on:
+  push:
+    paths:
+      - "agents/hosted/dotnetversion/dotnet-version-generator/**"
+      - ".github/workflows/deploy-dotnet-version-generator.agent.yml"
+      - ".github/workflows/deploy-dotnet-version-agent.reusable.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    if: github.event_name != 'push' || github.ref_name == github.event.repository.default_branch
+    uses: ./.github/workflows/deploy-dotnet-version-agent.reusable.yml
+    with:
+      project_dir: agents/hosted/dotnetversion/dotnet-version-generator
+      service_name: dotnet-version-generator
+      expected_marker: invalid_input
+    secrets: inherit

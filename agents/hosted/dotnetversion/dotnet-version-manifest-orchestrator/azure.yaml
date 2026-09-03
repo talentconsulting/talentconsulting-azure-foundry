@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+requiredVersions:
+  extensions:
+    azure.ai.agents: '>=1.0.0-beta.4'
+
+name: dotnet-version-manifest-orchestrator
+
+services:
+  dotnet-version-manifest-orchestrator:
+    project: src/dotnet-version-manifest-orchestrator
+    host: azure.ai.agent
+    language: python
+    uses: [ai-project]
+    codeConfiguration:
+      dependencyResolution: remote_build
+      entryPoint: main.py
+      runtime: python_3_13
+    container:
+      resources: { cpu: "0.5", memory: 1Gi }
+    description: Checks shared manifest dotnet-version nodes for changed repositories and creates one combined catalog and manifest update pull request.
+    environmentVariables:
+      - name: AZURE_AI_MODEL_DEPLOYMENT_NAME
+        value: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
+      - name: DOTNET_VERSION_WORKFLOW_AGENT_NAME
+        value: ${DOTNET_VERSION_WORKFLOW_AGENT_NAME}
+      - name: DOTNET_VERSION_PR_CREATOR_AGENT_NAME
+        value: ${DOTNET_VERSION_PR_CREATOR_AGENT_NAME}
+      - name: DOTNET_VERSION_MANIFEST_MAX_ENTRIES
+        value: ${DOTNET_VERSION_MANIFEST_MAX_ENTRIES}
+      - name: DOTNET_VERSION_MANIFEST_MAX_CATALOGS
+        value: ${DOTNET_VERSION_MANIFEST_MAX_CATALOGS}
+      - name: GITHUB_READ_TOKEN
+        value: ${{connections.openapi-pr-github.credentials.github_token}}
+    kind: hosted
+    name: dotnet-version-manifest-orchestrator
+    displayName: .NET Version Manifest Orchestrator
+    protocols:
+      - protocol: responses
+        version: 2.0.0
+  ai-project:
+    host: azure.ai.project
+    endpoint: ${AZURE_AI_PROJECT_ENDPOINT}
+
+infra:
+  provider: microsoft.foundry
