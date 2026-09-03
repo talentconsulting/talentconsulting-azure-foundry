@@ -133,6 +133,15 @@ jobs:
 
       - uses: Azure/setup-azd@v2
 
+      - name: Sign in to azd with GitHub federated credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          azd auth login \
+            --client-id "$AZURE_CLIENT_ID" \
+            --federated-credential-provider "github" \
+            --tenant-id "$AZURE_TENANT_ID"
+
       - name: Install Foundry extensions
         working-directory: ${{ matrix.project_dir }}
         run: |
