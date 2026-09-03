@@ -25,7 +25,6 @@ jobs:
       AZD_ENV_NAME: ci
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       AZURE_AI_PROJECT_ENDPOINT: ${{ secrets.AZURE_AI_PROJECT_ENDPOINT }}
       AZURE_AI_MODEL_DEPLOYMENT_NAME: ${{ vars.AZURE_AI_MODEL_DEPLOYMENT_NAME || 'gpt-4o' }}
       AZURE_LOCATION: ${{ vars.AZURE_LOCATION || 'uksouth' }}
@@ -42,6 +41,8 @@ jobs:
 
       - name: Validate deployment configuration
         shell: bash
+        env:
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: |
           set -euo pipefail
           missing=0
@@ -74,6 +75,8 @@ jobs:
       - name: Configure existing Foundry project
         working-directory: ${{ env.AGENT_PROJECT_DIR }}
         shell: bash
+        env:
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: |
           set -euo pipefail
           project_id="/subscriptions/$AZURE_SUBSCRIPTION_ID/resourceGroups/$AZURE_RESOURCE_GROUP/providers/Microsoft.CognitiveServices/accounts/$AZURE_AI_ACCOUNT_NAME/projects/$AZURE_AI_PROJECT_NAME"
@@ -104,6 +107,18 @@ jobs:
       - name: Deploy Database Schema Workflow
         working-directory: ${{ env.AGENT_PROJECT_DIR }}
         run: azd deploy dbschema-workflow --no-prompt
+
+      - name: Clear cached subscription ID before agent commands
+        working-directory: ${{ env.AGENT_PROJECT_DIR }}
+        shell: bash
+        # azd deploy needs AZURE_SUBSCRIPTION_ID, but leaving it set breaks azd ai agent
+        # show/invoke below: they resolve their token via `azd auth token`, whose tenant
+        # lookup for a discoverable subscription ID has no service-principal fast path
+        # and fails for this identity. `azd env set VAR ""` isn't enough -- azd loads
+        # every key in .env into its own process env at startup, so an empty value still
+        # counts as "found". Delete the key outright so the lookup skips cleanly and
+        # falls back to the tenant already established by azd auth login.
+        run: sed -i '/^AZURE_SUBSCRIPTION_ID=/d' ".azure/$AZD_ENV_NAME/.env"
 
       - name: Verify deployed agent
         working-directory: ${{ env.AGENT_PROJECT_DIR }}
