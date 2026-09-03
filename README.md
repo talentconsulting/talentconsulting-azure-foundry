@@ -1,6 +1,6 @@
 # Source Control Agent Pipelines
 
-This repository contains Azure AI Foundry hosted agents for manifest-driven source analysis. The OpenAPI, database-schema, event/command-catalog, external-service-dependency, and C4 pipelines generate repository artefacts and create one combined pull request for all successful manifest entries.
+This repository contains Azure AI Foundry hosted agents for manifest-driven source analysis. The OpenAPI, database-schema, event/command-catalog, external-service-dependency, C4, and local-development-configuration pipelines generate repository artefacts and create one combined pull request for all successful manifest entries.
 
 ## Pattern
 
@@ -100,6 +100,9 @@ The dependency order is:
 - `c4-source-discovery`, `c4-generator`, and `c4-pr-creator` are leaf agents.
 - `c4-workflow` depends on those three leaf agents.
 - `c4-manifest-orchestrator` depends on `c4-workflow` and `c4-pr-creator`.
+- `local-dev-config-source-discovery`, `local-dev-config-generator`, and `local-dev-config-pr-creator` are leaf agents.
+- `local-dev-config-workflow` depends on those three leaf agents.
+- `local-dev-config-manifest-orchestrator` depends on `local-dev-config-workflow` and `local-dev-config-pr-creator`.
 
 Previous workflows, scripts, prompt agents, and documentation are retained under [`backup/`](backup/).
 
@@ -139,6 +142,20 @@ Previous workflows, scripts, prompt agents, and documentation are retained under
 }
 ```
 
+## Local dev config orchestration
+
+[`local-dev-config-source-discovery`](agents/hosted/localdevconfig/local-dev-config-source-discovery/README.md) deterministically selects docker-compose files, `.env` examples, and application configuration files that can evidence the local services a repository needs to run. [`local-dev-config-generator`](agents/hosted/localdevconfig/local-dev-config-generator/README.md) extracts a validated catalog of local services and configuration key names, without returning secret values. [`local-dev-config-workflow`](agents/hosted/localdevconfig/local-dev-config-workflow/README.md) writes one `<repository>/local-dev-config/local-dev-config.json` file through [`local-dev-config-pr-creator`](agents/hosted/localdevconfig/local-dev-config-pr-creator/README.md), while [`local-dev-config-manifest-orchestrator`](agents/hosted/localdevconfig/local-dev-config-manifest-orchestrator/README.md) processes only `local-dev-config` nodes and combines changed repositories with the manifest update in one PR.
+
+```json
+{
+  "github-repo": "https://github.com/owner/application",
+  "local-dev-config": {
+    "path-to-scan": "tree/main/src",
+    "last-commit-hash-scanned": ""
+  }
+}
+```
+
 ## Run the complete workflow
 
 Invoke `openapi-spec-workflow` with:
@@ -155,6 +172,20 @@ Invoke `openapi-spec-workflow` with:
 Only `sourceUrl` and `targetRepository` are required. The response is always JSON and contains discovery/generation counts, per-file generation errors, and the PR creator result including `pullRequestUrl`.
 
 Generated file paths are deterministic and flat. By default, `src/Api/BidsController.cs` from the `application` repository becomes `application/open-api/BidsController.openapi.json`.
+
+## Run every flow against one repository
+
+[`.github/workflows/run-all-flows.yml`](.github/workflows/run-all-flows.yml) is a manual (`workflow_dispatch`) action that invokes all six `*-workflow` agents — OpenAPI, database schema, event/command catalog, service dependency, C4, and local dev config — against one source repository in parallel, each publishing to its own path in the target repository. Inputs:
+
+| Input | Required | Notes |
+| --- | --- | --- |
+| `source_url` | Yes | e.g. `https://github.com/owner/application/tree/main/src` |
+| `target_repository` | Yes | e.g. `owner/service-catalogue-data` |
+| `target_base_branch` | No | Defaults to each agent's own default when blank. |
+| `flows` | No | `all` (default) or a comma-separated subset of `openapi,dbschema,eventcatalog,service-dependency,c4,local-dev-config`. |
+| `defer_publication` | No | When `true`, generates artefacts without opening pull requests. |
+
+Each flow runs as its own matrix job with `fail-fast: false`, so one flow failing does not stop the others; results are written to the job summary.
 
 ## Deploy
 
@@ -254,6 +285,25 @@ cd ../c4-manifest-orchestrator
 azd deploy c4-manifest-orchestrator --no-prompt
 ```
 
+The local-dev-config agents use the same dependency order:
+
+```bash
+cd agents/hosted/localdevconfig/local-dev-config-source-discovery
+azd deploy local-dev-config-source-discovery --no-prompt
+
+cd ../local-dev-config-generator
+azd deploy local-dev-config-generator --no-prompt
+
+cd ../local-dev-config-pr-creator
+azd deploy local-dev-config-pr-creator --no-prompt
+
+cd ../local-dev-config-workflow
+azd deploy local-dev-config-workflow --no-prompt
+
+cd ../local-dev-config-manifest-orchestrator
+azd deploy local-dev-config-manifest-orchestrator --no-prompt
+```
+
 ## Test
 
 ```bash
@@ -281,4 +331,9 @@ python3 -m unittest discover -s agents/hosted/c4/c4-generator/src/c4-generator -
 python3 -m unittest discover -s agents/hosted/c4/c4-pr-creator/src/c4-pr-creator -p 'test_*.py'
 python3 -m unittest discover -s agents/hosted/c4/c4-workflow/src/c4-workflow -p 'test_*.py'
 python3 -m unittest discover -s agents/hosted/c4/c4-manifest-orchestrator/src/c4-manifest-orchestrator -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/localdevconfig/local-dev-config-source-discovery/src/local-dev-config-source-discovery -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/localdevconfig/local-dev-config-generator/src/local-dev-config-generator -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/localdevconfig/local-dev-config-pr-creator/src/local-dev-config-pr-creator -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/localdevconfig/local-dev-config-workflow/src/local-dev-config-workflow -p 'test_*.py'
+python3 -m unittest discover -s agents/hosted/localdevconfig/local-dev-config-manifest-orchestrator/src/local-dev-config-manifest-orchestrator -p 'test_*.py'
 ```

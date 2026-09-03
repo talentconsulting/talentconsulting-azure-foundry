@@ -107,8 +107,8 @@ def validate_discovery_output(value: Any, source_url: str, max_files: int) -> di
         raise WorkflowError("invalid_discovery_output", "Discovery must contain exactly sourceFiles and excludedFiles.")
     files = value["sourceFiles"]
     excluded = value["excludedFiles"]
-    if not isinstance(files, list) or not files or len(files) > max_files:
-        raise WorkflowError("invalid_discovery_output", f"sourceFiles must contain between 1 and {max_files} files.")
+    if not isinstance(files, list) or len(files) > max_files:
+        raise WorkflowError("invalid_discovery_output", f"sourceFiles must contain at most {max_files} files.")
     source = parse_source_url(source_url)
     validated = [_validate_blob_url(item, source) for item in files]
     if len(validated) != len(set(validated)):
@@ -281,27 +281,33 @@ def run_workflow(
     try:
         discovered = validate_discovery_output(invoker(project, discovery_name, model, {"sourceUrl": source_url}), source_url, max_files)
         files = discovered["sourceFiles"]
-        batches = [files[index:index + max(1, generator_batch_size)] for index in range(0, len(files), max(1, generator_batch_size))]
-        catalogs = []
-        for batch in batches:
-            try:
-                catalogs.append(_generate_batch(project, generator_name, model, source_url, batch, invoker))
-            except Exception as error:
-                batch_errors.append({"files": batch, "errorType": type(error).__name__, "message": str(error)[:300]})
-        if batch_errors:
-            raise WorkflowError(
-                "partial_generation_failed",
-                f"{len(batch_errors)} of {len(batches)} event catalog batches failed; refusing to publish a partial catalog.",
-            )
-        if not catalogs:
-            raise WorkflowError("generation_failed", "No source batch produced a valid event and command catalog.")
-        catalog, merge_warnings = merge_catalogs(catalogs)
-        batch_errors.extend(merge_warnings)
-        if not catalog["commands"] and not catalog["events"]:
-            raise WorkflowError("no_messages_found", "No events or commands were identified in the selected source files.")
         owner, repository, ref, path = parse_source_url(source_url)
-        if (catalog["repository"], catalog["ref"], catalog["path"]) != (f"{owner}/{repository}", ref, path):
-            raise WorkflowError("source_identity_mismatch", "Generated catalog source identity does not match sourceUrl.")
+        if not files:
+            # No candidate message/handler files is a legitimate outcome (e.g. a repository with no
+            # pub/sub activity at all), not a failure -- matching how the other pipelines in this repo
+            # treat "nothing evidenced" as a valid, empty result rather than fail-closed.
+            catalog = {"repository": f"{owner}/{repository}", "ref": ref, "path": path, "commands": [], "events": []}
+        else:
+            batches = [files[index:index + max(1, generator_batch_size)] for index in range(0, len(files), max(1, generator_batch_size))]
+            catalogs = []
+            for batch in batches:
+                try:
+                    catalogs.append(_generate_batch(project, generator_name, model, source_url, batch, invoker))
+                except Exception as error:
+                    batch_errors.append({"files": batch, "errorType": type(error).__name__, "message": str(error)[:300]})
+            if batch_errors:
+                raise WorkflowError(
+                    "partial_generation_failed",
+                    f"{len(batch_errors)} of {len(batches)} event catalog batches failed; refusing to publish a partial catalog.",
+                )
+            if not catalogs:
+                raise WorkflowError("generation_failed", "No source batch produced a valid event and command catalog.")
+            catalog, merge_warnings = merge_catalogs(catalogs)
+            batch_errors.extend(merge_warnings)
+            # An empty result here (files existed but none declared an event or command) is also
+            # valid -- same reasoning as the empty-discovery case above.
+            if (catalog["repository"], catalog["ref"], catalog["path"]) != (f"{owner}/{repository}", ref, path):
+                raise WorkflowError("source_identity_mismatch", "Generated catalog source identity does not match sourceUrl.")
     except Exception as error:
         return {
             "success": False, "sourceUrl": source_url, "generatedCatalogCount": 0,

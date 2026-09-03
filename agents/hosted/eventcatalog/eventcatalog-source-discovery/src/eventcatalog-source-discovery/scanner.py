@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import os
 import re
 import urllib.error
 import urllib.parse
@@ -11,6 +12,10 @@ import zipfile
 from dataclasses import dataclass
 
 
+# Authenticated GitHub requests get a 5,000/hour rate limit instead of the 60/hour anonymous
+# limit that a repeatedly-invoked discovery agent can exhaust quickly. Reuses the same PAT the
+# PR-creator agents already hold for writes.
+GITHUB_TOKEN = os.getenv("GITHUB_READ_TOKEN")
 MAX_ARCHIVE_BYTES = 100 * 1024 * 1024
 MAX_UNCOMPRESSED_BYTES = 250 * 1024 * 1024
 MAX_FILES = 100
@@ -85,8 +90,11 @@ def _blob(location: SourceLocation, path: str) -> str:
 
 def _download_archive(location: SourceLocation) -> bytes:
     url = f"https://codeload.github.com/{urllib.parse.quote(location.owner, safe='')}/{urllib.parse.quote(location.repository, safe='')}/zip/{urllib.parse.quote(location.ref, safe='')}"
+    headers = {"User-Agent": "eventcatalog-source-discovery"}
+    if GITHUB_TOKEN:
+        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
     try:
-        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "eventcatalog-source-discovery"}), timeout=120) as response:
+        with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=120) as response:
             body = response.read(MAX_ARCHIVE_BYTES + 1)
     except urllib.error.HTTPError as error:
         raise ScanError(f"GitHub returned HTTP {error.code}.") from error

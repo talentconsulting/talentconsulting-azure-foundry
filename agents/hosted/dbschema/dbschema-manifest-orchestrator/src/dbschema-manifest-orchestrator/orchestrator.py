@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import re
 import urllib.error
 import urllib.parse
@@ -16,6 +17,10 @@ MAX_MANIFEST_BYTES = 1024 * 1024
 COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 DBSCHEMA_NODE = "dbschema"
 LEGACY_DBSCHEMA_NODE = "db-schema"
+# Authenticated GitHub requests get a 5,000/hour rate limit instead of the 60/hour anonymous
+# limit that a repeatedly-invoked orchestrator (checking commit hashes for every entry, every
+# run) can exhaust quickly. Reuses the same PAT the PR-creator agents already hold for writes.
+GITHUB_TOKEN = os.getenv("GITHUB_READ_TOKEN")
 
 
 class ManifestError(ValueError):
@@ -95,7 +100,10 @@ def parse_blob_url(value: str) -> GitHubBlob:
 
 
 def _read_url(url: str) -> bytes:
-    request = urllib.request.Request(url, headers={"User-Agent": "dbschema-manifest-orchestrator"})
+    headers = {"User-Agent": "dbschema-manifest-orchestrator"}
+    if GITHUB_TOKEN:
+        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+    request = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             declared_size = int(response.headers.get("Content-Length", "0") or "0")

@@ -33,6 +33,8 @@ services:
         value: ${EVENTCATALOG_MANIFEST_MAX_ENTRIES}
       - name: EVENTCATALOG_MANIFEST_MAX_CATALOGS
         value: ${EVENTCATALOG_MANIFEST_MAX_CATALOGS}
+      - name: GITHUB_READ_TOKEN
+        value: ${{connections.openapi-pr-github.credentials.github_token}}
     kind: hosted
     name: eventcatalog-manifest-orchestrator
     displayName: Event and Command Catalog Manifest Orchestrator

@@ -12,6 +12,9 @@ services:
     container:
       resources: { cpu: "0.5", memory: 1Gi }
     description: Selects bounded, authoritative database schema source files from one public GitHub repository path.
+    environmentVariables:
+      - name: GITHUB_READ_TOKEN
+        value: ${{connections.openapi-pr-github.credentials.github_token}}
     kind: hosted
     name: dbschema-source-discovery
     displayName: Database Schema Source Discovery

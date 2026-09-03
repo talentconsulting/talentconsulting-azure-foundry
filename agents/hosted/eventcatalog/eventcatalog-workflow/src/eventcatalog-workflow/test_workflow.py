@@ -31,6 +31,10 @@ class WorkflowTests(unittest.TestCase):
         with self.assertRaises(WorkflowError):
             validate_discovery_output({"sourceFiles": ["https://github.com/other/app/blob/main/X.cs"], "excludedFiles": []}, SOURCE, 10)
 
+    def test_discovery_accepts_an_empty_source_files_list(self):
+        result = validate_discovery_output({"sourceFiles": [], "excludedFiles": []}, SOURCE, 10)
+        self.assertEqual([], result["sourceFiles"])
+
     def test_deferred_workflow_batches_and_merges_catalogs(self):
         calls = []
 
@@ -95,7 +99,24 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual([], result["catalogs"])
         self.assertFalse(publisher_called)
 
-    def test_empty_catalog_fails_instead_of_advancing_manifest_state(self):
+    def test_empty_discovery_produces_an_empty_but_successful_catalog(self):
+        # No candidate files at all is a legitimate outcome (e.g. a repository with no pub/sub
+        # activity) -- the generator must not even be invoked in this case.
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "discovery":
+                return {"sourceFiles": [], "excludedFiles": []}
+            raise AssertionError("The generator must not be called when discovery finds nothing.")
+
+        result = run_workflow(
+            object(), {"sourceUrl": SOURCE, "deferPublication": True},
+            "discovery", "generator", "publisher", "gpt-4o", invoker=invoke,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual([], result["catalogs"][0]["catalog"]["commands"])
+        self.assertEqual([], result["catalogs"][0]["catalog"]["events"])
+
+    def test_no_messages_identified_is_a_valid_successful_result(self):
         def invoke(project, name, model, payload, max_attempts=2):
             if name == "discovery":
                 return {"sourceFiles": FILES[:1], "excludedFiles": []}
@@ -106,9 +127,9 @@ class WorkflowTests(unittest.TestCase):
             "discovery", "generator", "publisher", "gpt-4o", invoker=invoke,
         )
 
-        self.assertFalse(result["success"])
-        self.assertEqual("no_messages_found", result["errors"][0]["code"])
-        self.assertEqual([], result["catalogs"])
+        self.assertTrue(result["success"])
+        self.assertEqual([], result["catalogs"][0]["catalog"]["commands"])
+        self.assertEqual([], result["catalogs"][0]["catalog"]["events"])
 
     def test_merge_combines_handlers_for_the_same_message(self):
         declaration = message("CreateOrder")

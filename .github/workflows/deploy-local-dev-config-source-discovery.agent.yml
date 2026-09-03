@@ -1,0 +1,19 @@
+name: Deploy Local Dev Config Source Discovery
+
+on:
+  push:
+    paths:
+      - "agents/hosted/localdevconfig/local-dev-config-source-discovery/**"
+      - ".github/workflows/deploy-local-dev-config-source-discovery.agent.yml"
+      - ".github/workflows/deploy-local-dev-config-agent.reusable.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    if: github.event_name != 'push' || github.ref_name == github.event.repository.default_branch
+    uses: ./.github/workflows/deploy-local-dev-config-agent.reusable.yml
+    with:
+      project_dir: agents/hosted/localdevconfig/local-dev-config-source-discovery
+      service_name: local-dev-config-source-discovery
+      expected_marker: localDevConfigFiles
+    secrets: inherit

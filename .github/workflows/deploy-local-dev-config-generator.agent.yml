@@ -1,0 +1,19 @@
+name: Deploy Local Dev Config Generator
+
+on:
+  push:
+    paths:
+      - "agents/hosted/localdevconfig/local-dev-config-generator/**"
+      - ".github/workflows/deploy-local-dev-config-generator.agent.yml"
+      - ".github/workflows/deploy-local-dev-config-agent.reusable.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    if: github.event_name != 'push' || github.ref_name == github.event.repository.default_branch
+    uses: ./.github/workflows/deploy-local-dev-config-agent.reusable.yml
+    with:
+      project_dir: agents/hosted/localdevconfig/local-dev-config-generator
+      service_name: local-dev-config-generator
+      expected_marker: invalid_input
+    secrets: inherit

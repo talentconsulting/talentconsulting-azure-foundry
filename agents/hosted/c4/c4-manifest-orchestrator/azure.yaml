@@ -30,6 +30,8 @@ services:
         value: ${C4_MANIFEST_MAX_ENTRIES}
       - name: C4_MANIFEST_MAX_CATALOGS
         value: ${C4_MANIFEST_MAX_CATALOGS}
+      - name: GITHUB_READ_TOKEN
+        value: ${{connections.openapi-pr-github.credentials.github_token}}
     kind: hosted
     name: c4-manifest-orchestrator
     displayName: C4 Manifest Orchestrator
