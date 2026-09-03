@@ -106,12 +106,15 @@ jobs:
 
       - name: Clear cached subscription ID before agent commands
         working-directory: ${{ env.AGENT_PROJECT_DIR }}
+        shell: bash
         # azd deploy needs AZURE_SUBSCRIPTION_ID, but leaving it set breaks azd ai agent
         # show/invoke below: they resolve their token via `azd auth token`, whose tenant
         # lookup for a discoverable subscription ID has no service-principal fast path
-        # and fails for this identity. Clearing it (blank, not unset) makes that lookup
-        # skip cleanly and fall back to the tenant already established by azd auth login.
-        run: azd env set AZURE_SUBSCRIPTION_ID ""
+        # and fails for this identity. `azd env set VAR ""` isn't enough -- azd loads
+        # every key in .env into its own process env at startup, so an empty value still
+        # counts as "found". Delete the key outright so the lookup skips cleanly and
+        # falls back to the tenant already established by azd auth login.
+        run: sed -i '/^AZURE_SUBSCRIPTION_ID=/d' ".azure/$AZD_ENV_NAME/.env"
 
       - name: Verify deployed agent
         working-directory: ${{ env.AGENT_PROJECT_DIR }}
