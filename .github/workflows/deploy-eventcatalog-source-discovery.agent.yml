@@ -99,10 +99,6 @@ jobs:
         working-directory: ${{ env.AGENT_PROJECT_DIR }}
         run: python3 -m unittest discover -s src/eventcatalog-source-discovery -p 'test_*.py'
 
-      - name: Initialize azd infrastructure state
-        working-directory: ${{ env.AGENT_PROJECT_DIR }}
-        run: azd provision --no-prompt
-
       - name: Deploy Event and Command Catalog Source Discovery
         working-directory: ${{ env.AGENT_PROJECT_DIR }}
         run: azd deploy eventcatalog-source-discovery --no-prompt

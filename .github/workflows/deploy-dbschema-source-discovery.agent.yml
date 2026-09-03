@@ -98,10 +98,6 @@ jobs:
         working-directory: ${{ env.AGENT_PROJECT_DIR }}
         run: python3 -m unittest discover -s src/dbschema-source-discovery -p 'test_*.py'
 
-      - name: Initialize azd infrastructure state
-        working-directory: ${{ env.AGENT_PROJECT_DIR }}
-        run: azd provision --no-prompt
-
       - name: Deploy Database Schema Source Discovery
         working-directory: ${{ env.AGENT_PROJECT_DIR }}
         run: azd deploy dbschema-source-discovery --no-prompt
