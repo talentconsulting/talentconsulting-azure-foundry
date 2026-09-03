@@ -175,17 +175,16 @@ Generated file paths are deterministic and flat. By default, `src/Api/BidsContro
 
 ## Run every flow against one repository
 
-[`.github/workflows/run-all-flows.yml`](.github/workflows/run-all-flows.yml) is a manual (`workflow_dispatch`) action that invokes all six `*-workflow` agents — OpenAPI, database schema, event/command catalog, service dependency, C4, and local dev config — against one source repository in parallel, each publishing to its own path in the target repository. Inputs:
+[`.github/workflows/run-all-flows.yml`](.github/workflows/run-all-flows.yml) is a manual (`workflow_dispatch`) action that looks up one repository's entry in a manifest and invokes every `*-workflow` agent that has a node on that entry — OpenAPI, database schema, event/command catalog, service dependency, C4, and local dev config — in parallel. Each flow uses its own `path-to-scan` from the manifest entry (they are not all the same subdirectory), so, for example, `dbschema` might scan `src/Data` while `eventcatalog` scans `src/Application` for the same repository. The destination repository and base branch are derived from the manifest URL itself, matching the convention the `*-manifest-orchestrator` agents already use. Inputs:
 
 | Input | Required | Notes |
 | --- | --- | --- |
-| `source_url` | Yes | e.g. `https://github.com/owner/application/tree/main/src` |
-| `target_repository` | Yes | e.g. `owner/service-catalogue-data` |
-| `target_base_branch` | No | Defaults to each agent's own default when blank. |
-| `flows` | No | `all` (default) or a comma-separated subset of `openapi,dbschema,eventcatalog,service-dependency,c4,local-dev-config`. |
+| `manifest_url` | Yes | Manifest blob URL, e.g. `https://github.com/owner/service-catalogue-data/blob/main/manifest.json`. Its repository and branch become `targetRepository`/`targetBaseBranch`. |
+| `github_repo` | Yes | The exact `github-repo` value to match in the manifest, e.g. `https://github.com/owner/application`. |
+| `flows` | No | `all` (default) or a comma-separated subset of `openapi,dbschema,eventcatalog,service-dependency,c4,local-dev-config`. Only flows actually present on the matched entry ever run. |
 | `defer_publication` | No | When `true`, generates artefacts without opening pull requests. |
 
-Each flow runs as its own matrix job with `fail-fast: false`, so one flow failing does not stop the others; results are written to the job summary.
+A `prepare` job resolves the manifest entry into a matrix (via [`.github/workflows/scripts/manifest-entry-flows.jq`](.github/workflows/scripts/manifest-entry-flows.jq)) and fails fast with a clear error if the repository or none of the requested flow nodes are found. Each matched flow then runs as its own matrix job with `fail-fast: false`, so one flow failing does not stop the others; results are written to the job summary. This runs the direct per-repository workflow agents (not the manifest orchestrators), so it does not update `last-commit-hash-scanned` in the manifest — it's for on-demand runs, not a replacement for the scheduled manifest orchestration.
 
 ## Deploy
 
