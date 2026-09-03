@@ -101,7 +101,6 @@ jobs:
     env:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.AZURE_AI_PROJECT_ENDPOINT }}
     steps:
       - uses: actions/checkout@v4
@@ -111,7 +110,7 @@ jobs:
         run: |
           set -euo pipefail
           missing=0
-          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID FOUNDRY_PROJECT_ENDPOINT; do
+          for name in AZURE_CLIENT_ID AZURE_TENANT_ID FOUNDRY_PROJECT_ENDPOINT; do
             if [ -z "${!name}" ]; then
               echo "::error::Missing dev environment secret $name."
               missing=1
