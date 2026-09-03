@@ -129,7 +129,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          payload=$(python3 -c 'import json, os; print(json.dumps({"apiFile": os.environ["AGENT_TEST_API_FILE"], "supportingFiles": [os.environ["AGENT_TEST_SUPPORTING_FILE_1"], os.environ["AGENT_TEST_SUPPORTING_FILE_2"]}, separators=(",", ":")))')
+          payload=$(python3 -c 'import json, os; print(json.dumps({"apiFile": os.environ["AGENT_TEST_API_FILE"], "supportingFiles": [os.environ["AGENT_TEST_SUPPORTING_FILE_1"], os.environ["AGENT_TEST_SUPPORTING_FILE_2"]]}, separators=(",", ":")))')
           response_file="$RUNNER_TEMP/openapi-spec-generator-response.txt"
           azd ai agent invoke openapi-spec-generator "$payload" > "$response_file" 2>&1
           cat "$response_file"
