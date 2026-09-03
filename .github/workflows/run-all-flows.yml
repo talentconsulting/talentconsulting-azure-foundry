@@ -151,20 +151,37 @@ jobs:
              + (if $targetBaseBranch != "" then {targetBaseBranch: $targetBaseBranch} else {} end)
              + (if $deferPublication then {deferPublication: true} else {} end)')
           echo "Payload: $payload"
-          response_file="$RUNNER_TEMP/${{ matrix.key }}-response.json"
+          response_file="$RUNNER_TEMP/${{ matrix.key }}-response.txt"
+          agent_json_file="$RUNNER_TEMP/${{ matrix.key }}-agent-response.json"
           azd ai agent invoke "${{ matrix.agent }}" "$payload" --no-prompt --output raw > "$response_file" 2>&1 || true
           cat "$response_file"
+
+          # --output raw prints the full HTTP response as a Server-Sent-Events stream, not a
+          # single JSON document. The agent's actual JSON answer is the text field of the last
+          # "data:" event (response.completed).
+          last_data_line=$(grep '^data: ' "$response_file" | tail -1 || true)
+          if [ -z "$last_data_line" ]; then
+            echo "::error::${{ matrix.key }}: no SSE 'data:' event found in azd output (see raw output above)."
+            exit 1
+          fi
+          if ! printf '%s' "$last_data_line" | sed 's/^data: //' | jq -e '.response.output[0].content[0].text' > /dev/null 2>&1; then
+            echo "::error::${{ matrix.key }}: could not find the agent's response text in the SSE stream (see raw output above)."
+            exit 1
+          fi
+          printf '%s' "$last_data_line" | sed 's/^data: //' | jq -r '.response.output[0].content[0].text' > "$agent_json_file"
+
           {
             echo "### ${{ matrix.key }}"
             echo '```json'
-            cat "$response_file"
+            cat "$agent_json_file"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          if ! jq -e . >/dev/null 2>&1 < "$response_file"; then
-            echo "::error::${{ matrix.key }}: response was not valid JSON."
+          if ! jq -e . >/dev/null 2>&1 < "$agent_json_file"; then
+            echo "::error::${{ matrix.key }}: agent response was not valid JSON."
+            cat "$agent_json_file"
             exit 1
           fi
-          if [ "$(jq -r '.success' "$response_file")" != "true" ]; then
-            echo "::error::${{ matrix.key }}: workflow reported success=false."
+          if [ "$(jq -r '.success' "$agent_json_file")" != "true" ]; then
+            echo "::error::${{ matrix.key }}: workflow reported success=false: $(jq -c '.errors // .generationErrors // empty' "$agent_json_file")"
             exit 1
           fi
