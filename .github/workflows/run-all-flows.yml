@@ -99,16 +99,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: dev
     env:
-      AZD_ENV_NAME: ci
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      AZURE_AI_PROJECT_ENDPOINT: ${{ secrets.AZURE_AI_PROJECT_ENDPOINT }}
-      AZURE_AI_MODEL_DEPLOYMENT_NAME: ${{ vars.AZURE_AI_MODEL_DEPLOYMENT_NAME || 'gpt-4o' }}
-      AZURE_LOCATION: ${{ vars.AZURE_LOCATION || 'uksouth' }}
-      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'talent-day-rg' }}
-      AZURE_AI_ACCOUNT_NAME: ${{ vars.AZURE_AI_ACCOUNT_NAME || 'talent-day-foundry' }}
-      AZURE_AI_PROJECT_NAME: ${{ vars.AZURE_AI_PROJECT_NAME || 'talent-day-proj-default' }}
+      FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.AZURE_AI_PROJECT_ENDPOINT }}
     steps:
       - uses: actions/checkout@v4
 
@@ -117,7 +111,7 @@ jobs:
         run: |
           set -euo pipefail
           missing=0
-          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID AZURE_AI_PROJECT_ENDPOINT; do
+          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID FOUNDRY_PROJECT_ENDPOINT; do
             if [ -z "${!name}" ]; then
               echo "::error::Missing dev environment secret $name."
               missing=1
@@ -125,13 +119,10 @@ jobs:
           done
           exit "$missing"
 
-      - uses: azure/login@v2
-        with:
-          client-id: ${{ env.AZURE_CLIENT_ID }}
-          tenant-id: ${{ env.AZURE_TENANT_ID }}
-          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
-
       - uses: Azure/setup-azd@v2
+
+      - name: Install Foundry extensions
+        run: azd extension install microsoft.foundry
 
       - name: Sign in to azd with GitHub federated credentials
         shell: bash
@@ -142,38 +133,7 @@ jobs:
             --federated-credential-provider "github" \
             --tenant-id "$AZURE_TENANT_ID"
 
-      - name: Install Foundry extensions
-        working-directory: ${{ matrix.project_dir }}
-        run: |
-          azd extension install azure.ai.agents
-          azd extension install azure.ai.projects
-          azd extension install microsoft.foundry
-
-      - name: Configure existing Foundry project
-        working-directory: ${{ matrix.project_dir }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          azd config set auth.useAzCliAuth true
-          azd config set defaults.subscription "$AZURE_SUBSCRIPTION_ID"
-          project_id="/subscriptions/$AZURE_SUBSCRIPTION_ID/resourceGroups/$AZURE_RESOURCE_GROUP/providers/Microsoft.CognitiveServices/accounts/$AZURE_AI_ACCOUNT_NAME/projects/$AZURE_AI_PROJECT_NAME"
-          azd env select "$AZD_ENV_NAME" || azd env new "$AZD_ENV_NAME" --no-prompt
-          azd env set AZURE_SUBSCRIPTION_ID "$AZURE_SUBSCRIPTION_ID"
-          azd env set AZURE_TENANT_ID "$AZURE_TENANT_ID"
-          azd env set AZURE_LOCATION "$AZURE_LOCATION"
-          azd env set AZURE_RESOURCE_GROUP "$AZURE_RESOURCE_GROUP"
-          azd env set AZURE_AI_ACCOUNT_NAME "$AZURE_AI_ACCOUNT_NAME"
-          azd env set AZURE_AI_PROJECT_NAME "$AZURE_AI_PROJECT_NAME"
-          azd env set AZURE_AI_PROJECT_ID "$project_id"
-          azd env set AZURE_AI_PROJECT_ENDPOINT "$AZURE_AI_PROJECT_ENDPOINT"
-          azd env set FOUNDRY_PROJECT_ENDPOINT "$AZURE_AI_PROJECT_ENDPOINT"
-          azd env set AZURE_AI_MODEL_DEPLOYMENT_NAME "$AZURE_AI_MODEL_DEPLOYMENT_NAME"
-          azd env set USE_EXISTING_AI_PROJECT true
-          azd env set ENABLE_HOSTED_AGENTS true
-          azd env set ENABLE_CAPABILITY_HOST false
-
       - name: Run ${{ matrix.key }}
-        working-directory: ${{ matrix.project_dir }}
         shell: bash
         env:
           SOURCE_URL: ${{ matrix.source_url }}
@@ -192,7 +152,7 @@ jobs:
              + (if $deferPublication then {deferPublication: true} else {} end)')
           echo "Payload: $payload"
           response_file="$RUNNER_TEMP/${{ matrix.key }}-response.json"
-          azd ai agent invoke "${{ matrix.agent }}" "$payload" > "$response_file" 2>&1 || true
+          azd ai agent invoke "${{ matrix.agent }}" "$payload" --no-prompt --output raw > "$response_file" 2>&1 || true
           cat "$response_file"
           {
             echo "### ${{ matrix.key }}"
