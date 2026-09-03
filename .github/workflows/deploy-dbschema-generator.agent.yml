@@ -72,11 +72,6 @@ jobs:
             --federated-credential-provider "github" \
             --tenant-id "$AZURE_TENANT_ID"
 
-      - name: Configure azd authentication
-        shell: bash
-        run: |
-          set -euo pipefail
-
       - name: Configure existing Foundry project
         working-directory: ${{ env.AGENT_PROJECT_DIR }}
         shell: bash
