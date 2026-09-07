@@ -203,6 +203,20 @@ Generated file paths are deterministic and flat. By default, `src/Api/BidsContro
 
 A `prepare` job resolves the manifest entry into a matrix (via [`.github/workflows/scripts/manifest-entry-flows.jq`](.github/workflows/scripts/manifest-entry-flows.jq)) and fails fast with a clear error if the repository or none of the requested flow nodes are found. Each matched flow then runs as its own matrix job with `fail-fast: false`, so one flow failing does not stop the others; results are written to the job summary. This runs the direct per-repository workflow agents (not the manifest orchestrators), so it does not update `last-commit-hash-scanned` in the manifest — it's for on-demand runs, not a replacement for the scheduled manifest orchestration.
 
+## Cost comparison
+
+These agents call Azure OpenAI (`gpt-4o` by default) on a standard pay-as-you-go basis, billed per token. The alternative would be provisioned/reserved capacity (Azure OpenAI PTUs) or a self-hosted GPU running an open-weight model. The table below estimates monthly spend across a manifest of 100 repositories, assuming ~5-10k tokens per agent invocation (source files in, generated artefact out) and up to 6 agent types (`openapi`, `dbschema`, `eventcatalog`, `dotnet-version`, `service-dependency`, `local-dev-config`) potentially running per changed repository.
+
+| Schedule | Repos changed | Invocations/month | Tokens/month | Pay-as-you-go | PTU (reserved, 15 PTU min.) | Self-hosted GPU (A100, 24/7) |
+| --- | --- | --- | --- | --- | --- | --- |
+| Nightly | ~50% | 1,500 – 9,000 | ~10.5M – 63M | ~£35 – £210 | ~£8,200/month | ~£2,100/month |
+| Weekly | ~50% | 215 – 1,300 | ~1.5M – 9M | ~£5 – £30 | ~£8,200/month | ~£2,100/month |
+| Weekly | 100% | 430 – 2,600 | ~3M – 18M | ~£11 – £64 | ~£8,200/month | ~£2,100/month |
+
+The PTU and GPU columns are flat costs, not scaled by usage: a provisioned deployment bills for reserved capacity whether or not it's called, and a self-hosted GPU costs the same whether idle or busy. Both are estimated from a global minimum GPT-4o PTU deployment (15 PTUs at ~£0.75/PTU-hour) and a single Azure NC-series A100 80GB VM (~$3.67/hour) run continuously — an H100 instead of an A100 roughly doubles the GPU figure to ~£4,000/month. Reserved capacity only becomes cheaper than pay-as-you-go once sustained usage passes roughly 150-200M tokens/month at 50%+ utilization; every schedule above sits one to two orders of magnitude below that, so pay-as-you-go remains the cheapest option unless usage grows well beyond a nightly/weekly batch across 100 repositories.
+
+These figures are estimates from third-party pricing guides and assumed token volumes, not measured usage or an official Microsoft rate card — verify current PTU and pay-as-you-go rates via the [Azure OpenAI pricing page](https://azure.microsoft.com/en-us/pricing/details/azure-openai/) or the Azure Retail Prices API, and check Azure Cost Management/Foundry metrics for actual spend, before budgeting.
+
 ## Deploy
 
 Deploy in dependency order:
