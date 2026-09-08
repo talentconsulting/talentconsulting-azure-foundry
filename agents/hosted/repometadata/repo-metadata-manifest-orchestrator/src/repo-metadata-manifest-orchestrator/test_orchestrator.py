@@ -22,10 +22,7 @@ OTHER_NEW_SHA = "3" * 40
 LAST_COMMIT_DATE = "2024-01-01T00:00:00Z"
 
 
-def make_catalog(
-    repository="source/app", ref="main", path="src", last_commit_date=LAST_COMMIT_DATE,
-    projects=None, sdks=None, azure_resources=None,
-):
+def make_catalog(repository="source/app", ref="main", path="src", last_commit_date=LAST_COMMIT_DATE, projects=None, sdks=None):
     return {
         "repository": repository,
         "ref": ref,
@@ -33,7 +30,6 @@ def make_catalog(
         "lastCommitDate": last_commit_date,
         "projects": projects if projects is not None else [{"path": "src/App/App.csproj", "targetFrameworks": ["net8.0"]}],
         "sdks": sdks if sdks is not None else [],
-        "azureResources": azure_resources if azure_resources is not None else [],
     }
 
 

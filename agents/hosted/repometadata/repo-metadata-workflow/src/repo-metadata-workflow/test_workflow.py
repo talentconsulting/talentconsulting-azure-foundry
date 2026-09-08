@@ -13,7 +13,7 @@ def _file(index: int) -> str:
     return f"https://github.com/source/app/blob/main/src/App{index}/App{index}.csproj"
 
 
-def _catalog(project_path: str, target_frameworks: list[str], azure_resources: list[dict] | None = None) -> dict:
+def _catalog(project_path: str, target_frameworks: list[str]) -> dict:
     return {
         "repository": "source/app",
         "ref": "main",
@@ -21,7 +21,6 @@ def _catalog(project_path: str, target_frameworks: list[str], azure_resources: l
         "lastCommitDate": LAST_COMMIT_DATE,
         "projects": [{"path": project_path, "targetFrameworks": target_frameworks}],
         "sdks": [],
-        "azureResources": azure_resources if azure_resources is not None else [],
     }
 
 
@@ -131,7 +130,6 @@ class RunWorkflowTests(unittest.TestCase):
         catalog = result["catalogs"][0]["catalog"]
         self.assertEqual([], catalog["projects"])
         self.assertEqual([], catalog["sdks"])
-        self.assertEqual([], catalog["azureResources"])
         self.assertEqual("source/app", catalog["repository"])
         self.assertEqual("main", catalog["ref"])
         self.assertEqual("src", catalog["path"])
@@ -250,13 +248,11 @@ class MergeCatalogsTests(unittest.TestCase):
             "repository": "o/r", "ref": "main", "path": "p", "lastCommitDate": LAST_COMMIT_DATE,
             "projects": [{"path": "src/App1/App1.csproj", "targetFrameworks": ["net8.0"]}],
             "sdks": [{"path": "src/global.json", "version": "8.0.100"}],
-            "azureResources": [],
         }
         second = {
             "repository": "o/r", "ref": "main", "path": "p", "lastCommitDate": LAST_COMMIT_DATE,
             "projects": [{"path": "src/App2/App2.csproj", "targetFrameworks": ["net9.0"]}],
             "sdks": [],
-            "azureResources": [],
         }
 
         merged, warnings = merge_catalogs([first, second])
@@ -278,7 +274,6 @@ class MergeCatalogsTests(unittest.TestCase):
             "repository": "o/r", "ref": "main", "path": "p", "lastCommitDate": LAST_COMMIT_DATE,
             "projects": [{"path": "src/App1/App1.csproj", "targetFrameworks": ["net8.0"]}],
             "sdks": [],
-            "azureResources": [],
         }
         second = {**first, "lastCommitDate": "2024-02-02T00:00:00Z"}
 
@@ -290,7 +285,6 @@ class MergeCatalogsTests(unittest.TestCase):
             "repository": "o/r", "ref": "main", "path": "p", "lastCommitDate": LAST_COMMIT_DATE,
             "projects": [{"path": "src/App/App.csproj", "targetFrameworks": ["net8.0"]}],
             "sdks": [{"path": "src/global.json", "version": "8.0.100"}],
-            "azureResources": [],
         }
 
         merged, warnings = merge_catalogs([catalog, catalog])
@@ -298,45 +292,6 @@ class MergeCatalogsTests(unittest.TestCase):
         self.assertEqual([], warnings)
         self.assertEqual(1, len(merged["projects"]))
         self.assertEqual(1, len(merged["sdks"]))
-
-    def test_merge_catalogs_combines_azure_resources_from_every_batch_without_dedup(self):
-        # azureResources has no single-value-per-path invariant like projects/sdks -- a batch
-        # just contributes whatever resources its files contained, and repeats across batches
-        # (e.g. the same file appearing in two batches, or two files declaring the same-looking
-        # resource) are kept, not collapsed.
-        first = {
-            "repository": "o/r", "ref": "main", "path": "p", "lastCommitDate": LAST_COMMIT_DATE,
-            "projects": [], "sdks": [],
-            "azureResources": [
-                {"path": "src/infra/main.bicep", "type": "Microsoft.Storage/storageAccounts", "name": "sa"},
-                {"path": "src/infra/main.bicep", "type": "Microsoft.KeyVault/vaults", "name": "kv"},
-            ],
-        }
-        second = {
-            "repository": "o/r", "ref": "main", "path": "p", "lastCommitDate": LAST_COMMIT_DATE,
-            "projects": [], "sdks": [],
-            "azureResources": [
-                {"path": "src/infra/network.tf", "type": "azurerm_virtual_network", "name": "vnet"},
-                {"path": "src/infra/main.bicep", "type": "Microsoft.Storage/storageAccounts", "name": "sa"},
-            ],
-        }
-
-        merged, warnings = merge_catalogs([first, second])
-
-        self.assertEqual([], warnings)
-        self.assertEqual(4, len(merged["azureResources"]))
-        # Sorted by (path.lower(), type, name or "") -- "Microsoft.KeyVault/..." sorts before
-        # "Microsoft.Storage/..." within the same path, and the two identical storageAccounts
-        # entries (one from each batch) are both kept.
-        self.assertEqual(
-            [
-                {"path": "src/infra/main.bicep", "type": "Microsoft.KeyVault/vaults", "name": "kv"},
-                {"path": "src/infra/main.bicep", "type": "Microsoft.Storage/storageAccounts", "name": "sa"},
-                {"path": "src/infra/main.bicep", "type": "Microsoft.Storage/storageAccounts", "name": "sa"},
-                {"path": "src/infra/network.tf", "type": "azurerm_virtual_network", "name": "vnet"},
-            ],
-            merged["azureResources"],
-        )
 
 
 if __name__ == "__main__":

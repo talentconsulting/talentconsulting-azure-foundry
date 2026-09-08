@@ -3,8 +3,6 @@ import unittest
 from generator import (
     GenerationError,
     SourceLocation,
-    _parse_bicep,
-    _parse_terraform,
     generate_from_text,
     parse_input,
     validate_catalog,
@@ -50,7 +48,7 @@ class ValidateCatalogTests(unittest.TestCase):
     def test_rejects_missing_last_commit_date(self):
         catalog = {
             "repository": "owner/repo", "ref": "main", "path": "src",
-            "projects": [], "sdks": [], "azureResources": [],
+            "projects": [], "sdks": [],
         }
         with self.assertRaises(GenerationError):
             validate_catalog(catalog)
@@ -58,7 +56,7 @@ class ValidateCatalogTests(unittest.TestCase):
     def test_rejects_empty_last_commit_date(self):
         catalog = {
             "repository": "owner/repo", "ref": "main", "path": "src", "lastCommitDate": "",
-            "projects": [], "sdks": [], "azureResources": [],
+            "projects": [], "sdks": [],
         }
         with self.assertRaises(GenerationError):
             validate_catalog(catalog)
@@ -67,35 +65,12 @@ class ValidateCatalogTests(unittest.TestCase):
         catalog = {
             "repository": "owner/repo", "ref": "main", "path": "src", "lastCommitDate": LAST_COMMIT_DATE,
             "projects": [{"path": "src/App/App.csproj", "targetFrameworks": ["net8.0"]}],
-            "sdks": [], "azureResources": [],
+            "sdks": [],
         }
         with self.assertRaises(GenerationError):
             validate_catalog(catalog, source_paths=set())
 
-    def test_rejects_azure_resource_path_outside_source_paths(self):
-        catalog = {
-            "repository": "owner/repo", "ref": "main", "path": "src", "lastCommitDate": LAST_COMMIT_DATE,
-            "projects": [], "sdks": [],
-            "azureResources": [{"path": "src/infra/main.bicep", "type": "Microsoft.Storage/storageAccounts", "name": "sa"}],
-        }
-        with self.assertRaises(GenerationError):
-            validate_catalog(catalog, source_paths=set())
-
-    def test_allows_multiple_azure_resources_sharing_one_path(self):
-        # Unlike projects/sdks, many resources can legitimately come from the same IaC file --
-        # this must not be treated as a duplicate-path error.
-        catalog = {
-            "repository": "owner/repo", "ref": "main", "path": "src", "lastCommitDate": LAST_COMMIT_DATE,
-            "projects": [], "sdks": [],
-            "azureResources": [
-                {"path": "src/infra/main.bicep", "type": "Microsoft.Storage/storageAccounts", "name": "sa"},
-                {"path": "src/infra/main.bicep", "type": "Microsoft.KeyVault/vaults", "name": "kv"},
-            ],
-        }
-        result = validate_catalog(catalog, source_paths={"src/infra/main.bicep"})
-        self.assertEqual(2, len(result["azureResources"]))
-
-    def test_sorts_projects_sdks_and_azure_resources_by_path(self):
+    def test_sorts_projects_and_sdks_by_path(self):
         catalog = {
             "repository": "owner/repo", "ref": "main", "path": "src", "lastCommitDate": LAST_COMMIT_DATE,
             "projects": [
@@ -106,154 +81,11 @@ class ValidateCatalogTests(unittest.TestCase):
                 {"path": "src/Z/global.json", "version": "8.0.100"},
                 {"path": "src/A/global.json", "version": "8.0.100"},
             ],
-            "azureResources": [
-                {"path": "src/Z/main.tf", "type": "azurerm_storage_account", "name": "z"},
-                {"path": "src/A/main.bicep", "type": "Microsoft.Storage/storageAccounts", "name": None},
-            ],
         }
-        result = validate_catalog(catalog, source_paths={
-            "src/Z/Z.csproj", "src/A/A.csproj", "src/Z/global.json", "src/A/global.json",
-            "src/Z/main.tf", "src/A/main.bicep",
-        })
+        result = validate_catalog(catalog, source_paths={"src/Z/Z.csproj", "src/A/A.csproj", "src/Z/global.json", "src/A/global.json"})
         self.assertEqual([item["path"] for item in result["projects"]], ["src/A/A.csproj", "src/Z/Z.csproj"])
         self.assertEqual([item["path"] for item in result["sdks"]], ["src/A/global.json", "src/Z/global.json"])
-        self.assertEqual([item["path"] for item in result["azureResources"]], ["src/A/main.bicep", "src/Z/main.tf"])
         self.assertEqual(result["lastCommitDate"], LAST_COMMIT_DATE)
-
-
-class ParseBicepTests(unittest.TestCase):
-    def test_simple_resource_with_literal_name(self):
-        content = """
-resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
-  name: 'mystorageacct'
-  location: 'uksouth'
-}
-"""
-        self.assertEqual(
-            _parse_bicep(content),
-            [{"type": "Microsoft.Storage/storageAccounts", "name": "mystorageacct"}],
-        )
-
-    def test_non_literal_name_yields_none(self):
-        content = """
-resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
-  name: '${prefix}-sa'
-  location: 'uksouth'
-}
-"""
-        self.assertEqual(
-            _parse_bicep(content),
-            [{"type": "Microsoft.Storage/storageAccounts", "name": None}],
-        )
-
-    def test_existing_resource_is_still_included(self):
-        content = """
-resource sharedVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
-  name: 'shared-kv'
-}
-"""
-        self.assertEqual(
-            _parse_bicep(content),
-            [{"type": "Microsoft.KeyVault/vaults", "name": "shared-kv"}],
-        )
-
-    def test_nested_object_before_matching_close_does_not_truncate_the_block(self):
-        # `name:` appears before the nested `sku: {...}` object. A naive non-greedy regex across
-        # the whole declaration would stop at the *first* '}' it saw (sku's), and a brace-depth
-        # bug would misplace the block boundary for whatever follows -- this checks that the
-        # second resource's own type/name are still parsed correctly and not corrupted by the
-        # first resource's internal nesting.
-        content = """
-resource sqlDb 'Microsoft.Sql/servers/databases@2023-05-01' = {
-  name: 'orders-db'
-  sku: {
-    name: 'S0'
-    tier: 'Standard'
-  }
-}
-resource cache 'Microsoft.Cache/redis@2023-08-01' = {
-  name: 'orders-cache'
-}
-"""
-        self.assertEqual(
-            _parse_bicep(content),
-            [
-                {"type": "Microsoft.Sql/servers/databases", "name": "orders-db"},
-                {"type": "Microsoft.Cache/redis", "name": "orders-cache"},
-            ],
-        )
-
-    def test_malformed_content_returns_empty_list(self):
-        self.assertEqual(_parse_bicep("this is not valid bicep content { with random braces"), [])
-        self.assertEqual(_parse_bicep(""), [])
-
-
-class ParseTerraformTests(unittest.TestCase):
-    def test_simple_resource_with_literal_name(self):
-        content = """
-resource "azurerm_storage_account" "sa" {
-  name                = "mystorageacct"
-  location            = "uksouth"
-}
-"""
-        self.assertEqual(
-            _parse_terraform(content),
-            [{"type": "azurerm_storage_account", "name": "mystorageacct"}],
-        )
-
-    def test_non_literal_name_yields_none(self):
-        content = """
-resource "azurerm_storage_account" "sa" {
-  name = "${var.prefix}-sa"
-}
-"""
-        self.assertEqual(
-            _parse_terraform(content),
-            [{"type": "azurerm_storage_account", "name": None}],
-        )
-
-    def test_meta_arguments_before_name_do_not_break_parsing(self):
-        # Terraform has no "existing" resource concept the way Bicep does, but a resource block
-        # commonly carries meta-arguments (count/for_each/provider) ahead of its other
-        # attributes -- this checks that extra content in the block still resolves the name.
-        content = """
-resource "azurerm_storage_account" "sa" {
-  count = 1
-  name  = "conditional-sa"
-}
-"""
-        self.assertEqual(
-            _parse_terraform(content),
-            [{"type": "azurerm_storage_account", "name": "conditional-sa"}],
-        )
-
-    def test_nested_block_before_matching_close_does_not_truncate_the_block(self):
-        content = """
-resource "azurerm_storage_account" "sa" {
-  name = "orders-storage"
-  network_rules {
-    default_action = "Deny"
-  }
-}
-resource "azurerm_redis_cache" "cache" {
-  name = "orders-cache"
-}
-"""
-        self.assertEqual(
-            _parse_terraform(content),
-            [
-                {"type": "azurerm_storage_account", "name": "orders-storage"},
-                {"type": "azurerm_redis_cache", "name": "orders-cache"},
-            ],
-        )
-
-    def test_malformed_content_returns_empty_list(self):
-        self.assertEqual(_parse_terraform("this is not valid terraform content { with random braces"), [])
-        self.assertEqual(_parse_terraform(""), [])
-
-    def test_non_azurerm_resource_type_is_excluded(self):
-        content = 'resource "aws_s3_bucket" "b" {\n  bucket = "irrelevant"\n}\n'
-        self.assertEqual(_parse_terraform(content), [])
 
 
 class GenerateFromTextTests(unittest.TestCase):
@@ -376,36 +208,6 @@ class GenerateFromTextTests(unittest.TestCase):
                 commit_date_loader=failing_commit_date_loader,
             )
         self.assertEqual(context.exception.code, "commit_lookup_failed")
-
-    def test_bicep_and_terraform_feed_into_one_combined_sorted_azure_resources_list(self):
-        def source_loader(location, paths):
-            return {
-                "src/infra/main.bicep": (
-                    "resource sa 'Microsoft.Storage/storageAccounts@2023-01-01' = {\n"
-                    "  name: 'appstorage'\n"
-                    "}\n"
-                ),
-                "src/infra/network.tf": (
-                    'resource "azurerm_virtual_network" "vnet" {\n'
-                    '  name = "app-vnet"\n'
-                    "}\n"
-                ),
-            }
-
-        bicep_blob = "https://github.com/owner/repo/blob/main/src/infra/main.bicep"
-        tf_blob = "https://github.com/owner/repo/blob/main/src/infra/network.tf"
-        result = generate_from_text(
-            '{"sourceUrl":"%s","sourceFiles":["%s","%s"]}' % (SOURCE_URL, bicep_blob, tf_blob),
-            source_loader=source_loader,
-            commit_date_loader=_commit_date_loader,
-        )
-        self.assertEqual(
-            result["azureResources"],
-            [
-                {"path": "src/infra/main.bicep", "type": "Microsoft.Storage/storageAccounts", "name": "appstorage"},
-                {"path": "src/infra/network.tf", "type": "azurerm_virtual_network", "name": "app-vnet"},
-            ],
-        )
 
 
 if __name__ == "__main__":

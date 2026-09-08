@@ -21,7 +21,7 @@ MAX_UNCOMPRESSED_BYTES = 250 * 1024 * 1024
 MAX_FILES = 100
 MAX_FILE_BYTES = 512 * 1024
 MAX_TOTAL_BYTES = 2 * 1024 * 1024
-IGNORED_PARTS = {".git", ".github", ".terraform", ".vs", ".vscode", "bin", "node_modules", "obj", "packages"}
+IGNORED_PARTS = {".git", ".github", ".vs", ".vscode", "bin", "node_modules", "obj", "packages"}
 
 
 class ScanError(RuntimeError):
@@ -68,12 +68,7 @@ def _basename(path: str) -> str:
 
 
 def _is_candidate(filename: str) -> bool:
-    return (
-        filename.endswith(".csproj")
-        or filename == "global.json"
-        or filename.endswith(".bicep")
-        or filename.endswith(".tf")
-    )
+    return filename.endswith(".csproj") or filename == "global.json"
 
 
 def _blob(location: SourceLocation, path: str) -> str:

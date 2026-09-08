@@ -166,11 +166,10 @@ def validate_generator_output(value: Any) -> dict[str, Any]:
         "lastCommitDate",
         "projects",
         "sdks",
-        "azureResources",
     }:
         raise WorkflowError(
             "invalid_generator_output",
-            "Generator response must contain repository, ref, path, lastCommitDate, projects, sdks, and azureResources.",
+            "Generator response must contain repository, ref, path, lastCommitDate, projects, and sdks.",
         )
     if (
         not isinstance(value["repository"], str)
@@ -186,14 +185,10 @@ def validate_generator_output(value: Any) -> dict[str, Any]:
             "invalid_generator_output",
             "Generator response contains an invalid lastCommitDate value.",
         )
-    if (
-        not isinstance(value["projects"], list)
-        or not isinstance(value["sdks"], list)
-        or not isinstance(value["azureResources"], list)
-    ):
+    if not isinstance(value["projects"], list) or not isinstance(value["sdks"], list):
         raise WorkflowError(
             "invalid_generator_output",
-            "Generator response contains invalid projects, sdks, or azureResources values.",
+            "Generator response contains invalid projects or sdks values.",
         )
     return value
 
@@ -226,7 +221,6 @@ def merge_catalogs(catalogs: list[dict[str, Any]]) -> tuple[dict[str, Any], list
     project_records: dict[str, dict[str, Any]] = {}
     sdk_order: list[str] = []
     sdk_records: dict[str, dict[str, Any]] = {}
-    azure_resources: list[dict[str, Any]] = []
 
     for catalog in catalogs:
         if (
@@ -256,14 +250,9 @@ def merge_catalogs(catalogs: list[dict[str, Any]]) -> tuple[dict[str, Any], list
                     "errorType": "DuplicateSdk",
                     "message": f"Kept the first version for {key}; discarded a conflicting value from a later batch.",
                 })
-        # Unlike projects/sdks, azureResources has no single-value-per-path invariant -- a single
-        # Bicep/Terraform file can legitimately declare many resources, so every batch simply
-        # contributes whatever resources its files contained. No dedup, no conflict warnings.
-        azure_resources.extend(catalog["azureResources"])
 
     projects = sorted((project_records[key] for key in project_order), key=lambda item: item["path"].lower())
     sdks = sorted((sdk_records[key] for key in sdk_order), key=lambda item: item["path"].lower())
-    azure_resources.sort(key=lambda item: (item["path"].lower(), item["type"], item["name"] or ""))
 
     merged = {
         "repository": repository,
@@ -272,7 +261,6 @@ def merge_catalogs(catalogs: list[dict[str, Any]]) -> tuple[dict[str, Any], list
         "lastCommitDate": last_commit_date,
         "projects": projects,
         "sdks": sdks,
-        "azureResources": azure_resources,
     }
     return merged, warnings
 
@@ -386,7 +374,6 @@ def run_workflow(
                 "lastCommitDate": _fetch_last_commit_date(owner, repo, ref),
                 "projects": [],
                 "sdks": [],
-                "azureResources": [],
             }
         else:
             batches = [

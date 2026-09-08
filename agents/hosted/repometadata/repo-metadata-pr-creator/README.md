@@ -1,6 +1,6 @@
-# Repository Metadata PR Creator
+# .NET Version PR Creator
 
-A hosted Foundry agent that commits validated repo-metadata JSON catalogs and an optional updated manifest to one GitHub branch, then opens one pull request. It never approves or merges the pull request.
+A hosted Foundry agent that commits validated .NET version JSON catalogs and an optional updated manifest to one GitHub branch, then opens one pull request. It never approves or merges the pull request.
 
 ## Input
 
@@ -14,15 +14,11 @@ A hosted Foundry agent that commits validated repo-metadata JSON catalogs and an
         "repository": "owner/application",
         "ref": "main",
         "path": "src",
-        "lastCommitDate": "2024-01-01T00:00:00Z",
         "projects": [
           {"path": "src/App/App.csproj", "targetFrameworks": ["net8.0"]}
         ],
         "sdks": [
           {"path": "src/global.json", "version": "8.0.100", "rollForward": "latestMinor"}
-        ],
-        "azureResources": [
-          {"path": "src/infra/main.bicep", "type": "Microsoft.Storage/storageAccounts", "name": "appstorage"}
         ]
       },
       "targetPath": "application/repo-metadata/repo-metadata.json"
@@ -33,7 +29,7 @@ A hosted Foundry agent that commits validated repo-metadata JSON catalogs and an
 }
 ```
 
-`repository` and a non-empty `catalogs` array are required. Every catalog requires its original GitHub tree `sourceUrl`, the generated `catalog` (with `repository`, `ref`, `path`, `lastCommitDate`, `projects`, `sdks`, and `azureResources`), and a safe JSON `targetPath`. When `targetPath` is omitted it defaults to `{sourceRepoName}/{targetDirectory or "repo-metadata"}/repo-metadata.json` -- the source repository name comes first, then the target directory. Optional fields are `targetDirectory`, `baseBranch`, `branchName`, `pullRequestTitle`, `pullRequestBody`, and `manifestFile`.
+`repository` and a non-empty `catalogs` array are required. Every catalog requires its original GitHub tree `sourceUrl`, the generated `catalog` (with `repository`, `ref`, `path`, `projects`, and `sdks`), and a safe JSON `targetPath`. When `targetPath` is omitted it defaults to `{sourceRepoName}/{targetDirectory or "repo-metadata"}/repo-metadata.json` -- the source repository name comes first, then the target directory. Optional fields are `targetDirectory`, `baseBranch`, `branchName`, `pullRequestTitle`, `pullRequestBody`, and `manifestFile`.
 
 The agent accepts at most 100 catalogs and 10 MiB of generated JSON per request. Unchanged files do not create a branch or pull request.
 

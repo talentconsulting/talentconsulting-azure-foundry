@@ -271,20 +271,12 @@ def _validate_workflow_output(value: Any, entry: ManifestEntry) -> list[dict[str
     if not isinstance(item, dict) or set(item) != {"sourceUrl", "catalog"} or item["sourceUrl"] != entry.source_url:
         raise ManifestError("invalid_workflow_output", "repo-metadata workflow returned an invalid catalog item.")
     catalog = item["catalog"]
-    if not isinstance(catalog, dict) or set(catalog) != {
-        "repository", "ref", "path", "lastCommitDate", "projects", "sdks", "azureResources",
-    }:
+    if not isinstance(catalog, dict) or set(catalog) != {"repository", "ref", "path", "lastCommitDate", "projects", "sdks"}:
         raise ManifestError("invalid_workflow_output", "repo-metadata workflow returned an invalid catalog.")
     if any(not isinstance(catalog[field], str) for field in ("repository", "ref", "path")):
         raise ManifestError("invalid_workflow_output", "repo-metadata workflow returned an incomplete catalog.")
-    if (
-        not isinstance(catalog["projects"], list)
-        or not isinstance(catalog["sdks"], list)
-        or not isinstance(catalog["azureResources"], list)
-    ):
-        raise ManifestError(
-            "invalid_workflow_output", "repo-metadata workflow returned invalid projects, sdks, or azureResources."
-        )
+    if not isinstance(catalog["projects"], list) or not isinstance(catalog["sdks"], list):
+        raise ManifestError("invalid_workflow_output", "repo-metadata workflow returned invalid projects or sdks.")
     if (catalog["repository"], catalog["ref"], catalog["path"]) != (entry.repository_name, entry.ref, entry.scan_path):
         raise ManifestError("invalid_workflow_output", "repo-metadata workflow returned mismatched source identity.")
     return [{
