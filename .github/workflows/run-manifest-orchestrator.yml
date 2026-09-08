@@ -18,7 +18,7 @@ on:
           - service-dependency
           - c4
           - local-dev-config
-          - dotnet-version
+          - repo-metadata
 
 permissions:
   id-token: write
@@ -51,7 +51,7 @@ jobs:
             service-dependency) dir="servicedependencies/service-dependency-manifest-orchestrator"; agent="service-dependency-manifest-orchestrator" ;;
             c4) dir="c4/c4-manifest-orchestrator"; agent="c4-manifest-orchestrator" ;;
             local-dev-config) dir="localdevconfig/local-dev-config-manifest-orchestrator"; agent="local-dev-config-manifest-orchestrator" ;;
-            dotnet-version) dir="dotnetversion/dotnet-version-manifest-orchestrator"; agent="dotnet-version-manifest-orchestrator" ;;
+            repo-metadata) dir="repometadata/repo-metadata-manifest-orchestrator"; agent="repo-metadata-manifest-orchestrator" ;;
             *) echo "::error::Unknown flow '${{ inputs.flow }}'"; exit 1 ;;
           esac
           echo "project_dir=agents/hosted/$dir" >> "$GITHUB_OUTPUT"
