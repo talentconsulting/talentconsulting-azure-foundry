@@ -1,9 +1,10 @@
-"""Deterministically parse .csproj and global.json files into a .NET version catalog."""
+"""Deterministically parse .csproj, global.json, Bicep, and Terraform files into a repo-metadata catalog."""
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -199,6 +200,103 @@ def _parse_csproj(content: str) -> list[str]:
     return deduped
 
 
+_BICEP_RESOURCE_PATTERN = re.compile(
+    r"\bresource\b\s+[A-Za-z_][A-Za-z0-9_]*\s+'([^'@]+)@[^']*'\s*(?:existing\s+)?=\s*\{"
+)
+_BICEP_NAME_PATTERN = re.compile(r"name\s*:\s*'([^']*)'")
+_TERRAFORM_RESOURCE_PATTERN = re.compile(r'\bresource\b\s+"([^"]+)"\s+"[^"]*"\s*\{')
+_TERRAFORM_NAME_PATTERN = re.compile(r'name\s*=\s*"([^"]*)"')
+
+
+def _matching_brace_index(content: str, open_brace_index: int) -> int:
+    """Return the index of the '}' that closes the '{' at open_brace_index, by depth counting.
+
+    This is a plain character-level brace counter, not a string-literal-aware tokenizer: a
+    '{' or '}' that happens to appear inside a nested string literal (for example Bicep string
+    interpolation like '${...}' containing its own braces, or a plain string value containing a
+    literal brace character) is counted the same as a real block delimiter. In every case
+    exercised by this pipeline's own resource declarations that has not been an issue -- Bicep's
+    own '${...}' interpolation braces are still balanced pairs, so depth counting still finds the
+    correct end -- but a resource block whose string content contained a genuinely unbalanced
+    brace character would throw this off. If no matching '}' is found (unbalanced/truncated
+    content), the end of the string is returned so the caller still gets a bounded slice instead
+    of raising.
+    """
+    depth = 1
+    index = open_brace_index + 1
+    length = len(content)
+    while index < length:
+        char = content[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return index
+        index += 1
+    return length
+
+
+def _first_literal_name(block: str, pattern: re.Pattern[str]) -> str | None:
+    match = pattern.search(block)
+    if not match:
+        return None
+    value = match.group(1)
+    # A quoted value containing '${' is a string interpolation/expression, not a plain literal
+    # (e.g. Bicep '${var}-thing' or Terraform "${var.prefix}-thing") -- treat it as unresolved.
+    if "${" in value:
+        return None
+    return value
+
+
+def _parse_bicep(content: str) -> list[dict[str, Any]]:
+    """Extract {type, name} pairs from top-level Bicep `resource` declarations.
+
+    Only literal single-quoted `name: '...'` values are resolved; anything else (a variable
+    reference, an expression, or a string interpolation like '${var}-thing') yields name: None.
+    `existing` resource references are included, since they still describe a dependency of this
+    application even though Bicep will not deploy them. Out of scope for this pass: .bicepparam
+    files and ARM JSON templates are not parsed at all (the source-discovery scanner never
+    selects them), and Bicep modules (`module` blocks) are not treated as resources.
+    """
+    resources: list[dict[str, Any]] = []
+    try:
+        for match in _BICEP_RESOURCE_PATTERN.finditer(content):
+            resource_type = match.group(1)
+            open_brace_index = match.end() - 1
+            close_brace_index = _matching_brace_index(content, open_brace_index)
+            block = content[open_brace_index + 1 : close_brace_index]
+            resources.append({"type": resource_type, "name": _first_literal_name(block, _BICEP_NAME_PATTERN)})
+    except Exception:
+        return []
+    return resources
+
+
+def _parse_terraform(content: str) -> list[dict[str, Any]]:
+    """Extract {type, name} pairs from top-level Terraform `resource "azurerm_..." "..." {}` blocks.
+
+    Only resource types starting with `azurerm_` are included -- other providers (aws_*,
+    google_*, etc.) are skipped, since this pipeline is specifically extracting Azure
+    infrastructure. Only literal double-quoted `name = "..."` values are resolved; anything else
+    (a variable reference, an expression, or a string interpolation like "${var.prefix}-thing")
+    yields name: None. Terraform `data` blocks are out of scope for this pass and are never
+    matched, since the pattern only matches the `resource` keyword.
+    """
+    resources: list[dict[str, Any]] = []
+    try:
+        for match in _TERRAFORM_RESOURCE_PATTERN.finditer(content):
+            resource_type = match.group(1)
+            if not resource_type.startswith("azurerm_"):
+                continue
+            open_brace_index = match.end() - 1
+            close_brace_index = _matching_brace_index(content, open_brace_index)
+            block = content[open_brace_index + 1 : close_brace_index]
+            resources.append({"type": resource_type, "name": _first_literal_name(block, _TERRAFORM_NAME_PATTERN)})
+    except Exception:
+        return []
+    return resources
+
+
 def _parse_global_json(content: str) -> dict[str, str] | None:
     try:
         document = json.loads(content)
@@ -222,14 +320,22 @@ def _parse_global_json(content: str) -> dict[str, str] | None:
 def _build_catalog(location: SourceLocation, sources: dict[str, str], last_commit_date: str) -> dict[str, Any]:
     projects: list[dict[str, Any]] = []
     sdks: list[dict[str, Any]] = []
+    azure_resources: list[dict[str, Any]] = []
     for path in sorted(sources):
         content = sources[path]
-        if path.lower().endswith(".csproj"):
+        lower_path = path.lower()
+        if lower_path.endswith(".csproj"):
             projects.append({"path": path, "targetFrameworks": _parse_csproj(content)})
-        elif path.lower().rsplit("/", 1)[-1] == "global.json":
+        elif lower_path.rsplit("/", 1)[-1] == "global.json":
             sdk = _parse_global_json(content)
             if sdk is not None:
                 sdks.append({"path": path, **sdk})
+        elif lower_path.endswith(".bicep"):
+            for resource in _parse_bicep(content):
+                azure_resources.append({"path": path, **resource})
+        elif lower_path.endswith(".tf"):
+            for resource in _parse_terraform(content):
+                azure_resources.append({"path": path, **resource})
     return {
         "repository": f"{location.owner}/{location.repository}",
         "ref": location.ref,
@@ -237,6 +343,7 @@ def _build_catalog(location: SourceLocation, sources: dict[str, str], last_commi
         "lastCommitDate": last_commit_date,
         "projects": projects,
         "sdks": sdks,
+        "azureResources": azure_resources,
     }
 
 
@@ -245,8 +352,13 @@ def validate_catalog(
     location: SourceLocation | None = None,
     source_paths: set[str] | None = None,
 ) -> dict[str, Any]:
-    if not isinstance(document, dict) or set(document) != {"repository", "ref", "path", "lastCommitDate", "projects", "sdks"}:
-        raise GenerationError("invalid_catalog", "Catalog must contain repository, ref, path, lastCommitDate, projects, and sdks.")
+    if not isinstance(document, dict) or set(document) != {
+        "repository", "ref", "path", "lastCommitDate", "projects", "sdks", "azureResources",
+    }:
+        raise GenerationError(
+            "invalid_catalog",
+            "Catalog must contain repository, ref, path, lastCommitDate, projects, sdks, and azureResources.",
+        )
     if not all(isinstance(document[field], str) for field in ("repository", "ref", "path", "lastCommitDate")):
         raise GenerationError("invalid_catalog", "Catalog repository, ref, path, and lastCommitDate must be strings.")
     if not document["lastCommitDate"]:
@@ -299,6 +411,31 @@ def validate_catalog(
             raise GenerationError("invalid_catalog", f"Duplicate sdk path {item['path']}.")
         seen_sdk_paths.add(item["path"])
 
+    azure_resources = document["azureResources"]
+    if not isinstance(azure_resources, list):
+        raise GenerationError("invalid_catalog", "azureResources must be a list.")
+    for item in azure_resources:
+        if (
+            not isinstance(item, dict)
+            or set(item) != {"path", "type", "name"}
+            or not isinstance(item["path"], str)
+            or not item["path"]
+            or not isinstance(item["type"], str)
+            or not item["type"]
+            or not (item["name"] is None or (isinstance(item["name"], str) and item["name"]))
+        ):
+            raise GenerationError(
+                "invalid_catalog",
+                "Each azureResources entry must contain path, type, and name (name may be null).",
+            )
+        if source_paths is not None and item["path"] not in source_paths:
+            raise GenerationError(
+                "invalid_catalog", f"azureResources path {item['path']} was not one of the supplied source files."
+            )
+        # Unlike projects/sdks, a single Bicep/Terraform file can legitimately declare many
+        # resources, so many azureResources entries are expected to share the same path -- no
+        # path-uniqueness check here.
+
     return {
         "repository": document["repository"],
         "ref": document["ref"],
@@ -306,6 +443,9 @@ def validate_catalog(
         "lastCommitDate": document["lastCommitDate"],
         "projects": sorted(projects, key=lambda item: item["path"].lower()),
         "sdks": sorted(sdks, key=lambda item: item["path"].lower()),
+        "azureResources": sorted(
+            azure_resources, key=lambda item: (item["path"].lower(), item["type"], item["name"] or "")
+        ),
     }
 
 

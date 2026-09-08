@@ -161,8 +161,13 @@ def validate_request(payload: dict[str, Any]) -> dict[str, Any]:
         ):
             raise PublicationError("invalid_catalog", "Each catalog must contain sourceUrl and catalog, with optional repository and targetPath.")
         catalog = item["catalog"]
-        if not isinstance(catalog, dict) or set(catalog) != {"repository", "ref", "path", "lastCommitDate", "projects", "sdks"}:
-            raise PublicationError("invalid_catalog", "Each catalog must contain repository, ref, path, lastCommitDate, projects, and sdks.")
+        if not isinstance(catalog, dict) or set(catalog) != {
+            "repository", "ref", "path", "lastCommitDate", "projects", "sdks", "azureResources",
+        }:
+            raise PublicationError(
+                "invalid_catalog",
+                "Each catalog must contain repository, ref, path, lastCommitDate, projects, sdks, and azureResources.",
+            )
         if (
             not isinstance(catalog["repository"], str)
             or not isinstance(catalog["ref"], str)
@@ -171,6 +176,7 @@ def validate_request(payload: dict[str, Any]) -> dict[str, Any]:
             or not catalog["lastCommitDate"]
             or not isinstance(catalog["projects"], list)
             or not isinstance(catalog["sdks"], list)
+            or not isinstance(catalog["azureResources"], list)
         ):
             raise PublicationError("invalid_catalog", "Each catalog contains invalid repo-metadata fields.")
         output_path = _clean_relative_path(

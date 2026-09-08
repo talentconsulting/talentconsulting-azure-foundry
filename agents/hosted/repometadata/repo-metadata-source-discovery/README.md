@@ -1,13 +1,13 @@
-# .NET Version Source Discovery
+# Repository Metadata Source Discovery
 
-Deterministically selects `.csproj` and `global.json` files beneath one public GitHub tree URL, ignoring `bin`, `obj`, `packages`, and `node_modules` directories. It returns bounded same-repository blob URLs and exclusions; no model is used.
+Deterministically selects `.csproj`, `global.json`, `.bicep`, and `.tf` files beneath one public GitHub tree URL, ignoring `bin`, `obj`, `packages`, `node_modules`, and `.terraform` (Terraform's local provider/module cache) directories. It returns bounded same-repository blob URLs and exclusions; no model is used.
 
 ```json
 {"sourceUrl":"https://github.com/owner/repository/tree/main/src"}
 ```
 
 ```json
-{"repoMetadataFiles":["https://github.com/owner/repository/blob/main/src/App/App.csproj","https://github.com/owner/repository/blob/main/src/global.json"],"excludedFiles":[]}
+{"repoMetadataFiles":["https://github.com/owner/repository/blob/main/src/App/App.csproj","https://github.com/owner/repository/blob/main/src/global.json","https://github.com/owner/repository/blob/main/src/infra/main.bicep"],"excludedFiles":[]}
 ```
 
 ```bash

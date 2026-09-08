@@ -44,6 +44,21 @@ class ScanTests(unittest.TestCase):
         )
         self.assertEqual(result["excludedFiles"], [])
 
+    def test_selects_bicep_and_terraform_files(self):
+        result = scan(SOURCE, archive({
+            "src/infra/main.bicep": "resource sa 'Microsoft.Storage/storageAccounts@2023-01-01' = {}",
+            "src/infra/main.tf": 'resource "azurerm_storage_account" "sa" {}',
+            "src/infra/README.MD": "not relevant",
+        }))
+        self.assertEqual(
+            result["repoMetadataFiles"],
+            [
+                "https://github.com/owner/repo/blob/main/src/infra/main.bicep",
+                "https://github.com/owner/repo/blob/main/src/infra/main.tf",
+            ],
+        )
+        self.assertEqual(result["excludedFiles"], [])
+
     def test_ignores_build_and_package_directories(self):
         result = scan(SOURCE, archive({
             "src/App/obj/App.csproj": "<Project />",
@@ -51,6 +66,16 @@ class ScanTests(unittest.TestCase):
             "src/packages/Some.Package/Some.Package.csproj": "<Project />",
         }))
         self.assertEqual(result["repoMetadataFiles"], [])
+
+    def test_ignores_terraform_cache_directory(self):
+        result = scan(SOURCE, archive({
+            "src/infra/.terraform/providers/azurerm/main.tf": 'resource "azurerm_storage_account" "sa" {}',
+            "src/infra/main.tf": 'resource "azurerm_storage_account" "sa" {}',
+        }))
+        self.assertEqual(
+            result["repoMetadataFiles"],
+            ["https://github.com/owner/repo/blob/main/src/infra/main.tf"],
+        )
 
     def test_restricts_to_files_under_requested_path(self):
         result = scan(SOURCE, archive({
