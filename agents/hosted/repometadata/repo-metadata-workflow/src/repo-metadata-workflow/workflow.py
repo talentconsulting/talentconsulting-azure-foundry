@@ -166,10 +166,11 @@ def validate_generator_output(value: Any) -> dict[str, Any]:
         "lastCommitDate",
         "projects",
         "sdks",
+        "dotnetSupport",
     }:
         raise WorkflowError(
             "invalid_generator_output",
-            "Generator response must contain repository, ref, path, lastCommitDate, projects, and sdks.",
+            "Generator response must contain repository, ref, path, lastCommitDate, projects, sdks, and dotnetSupport.",
         )
     if (
         not isinstance(value["repository"], str)
@@ -189,6 +190,11 @@ def validate_generator_output(value: Any) -> dict[str, Any]:
         raise WorkflowError(
             "invalid_generator_output",
             "Generator response contains invalid projects or sdks values.",
+        )
+    if not isinstance(value["dotnetSupport"], list):
+        raise WorkflowError(
+            "invalid_generator_output",
+            "Generator response contains an invalid dotnetSupport value.",
         )
     return value
 
@@ -221,6 +227,7 @@ def merge_catalogs(catalogs: list[dict[str, Any]]) -> tuple[dict[str, Any], list
     project_records: dict[str, dict[str, Any]] = {}
     sdk_order: list[str] = []
     sdk_records: dict[str, dict[str, Any]] = {}
+    dotnet_support_records: dict[str, dict[str, Any]] = {}
 
     for catalog in catalogs:
         if (
@@ -250,9 +257,16 @@ def merge_catalogs(catalogs: list[dict[str, Any]]) -> tuple[dict[str, Any], list
                     "errorType": "DuplicateSdk",
                     "message": f"Kept the first version for {key}; discarded a conflicting value from a later batch.",
                 })
+        for entry in catalog["dotnetSupport"]:
+            # Unlike projects/sdks, a given targetFramework moniker always produces the identical
+            # (endOfSupport, supportPhase) pair regardless of which batch computed it -- it's a
+            # pure function of the moniker string -- so this is a plain dedup, not a
+            # first-wins-with-warning merge.
+            dotnet_support_records[entry["targetFramework"]] = dict(entry)
 
     projects = sorted((project_records[key] for key in project_order), key=lambda item: item["path"].lower())
     sdks = sorted((sdk_records[key] for key in sdk_order), key=lambda item: item["path"].lower())
+    dotnet_support = sorted(dotnet_support_records.values(), key=lambda item: item["targetFramework"])
 
     merged = {
         "repository": repository,
@@ -261,6 +275,7 @@ def merge_catalogs(catalogs: list[dict[str, Any]]) -> tuple[dict[str, Any], list
         "lastCommitDate": last_commit_date,
         "projects": projects,
         "sdks": sdks,
+        "dotnetSupport": dotnet_support,
     }
     return merged, warnings
 
@@ -374,6 +389,7 @@ def run_workflow(
                 "lastCommitDate": _fetch_last_commit_date(owner, repo, ref),
                 "projects": [],
                 "sdks": [],
+                "dotnetSupport": [],
             }
         else:
             batches = [

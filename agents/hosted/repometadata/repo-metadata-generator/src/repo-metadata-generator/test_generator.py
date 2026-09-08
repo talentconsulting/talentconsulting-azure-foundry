@@ -3,6 +3,7 @@ import unittest
 from generator import (
     GenerationError,
     SourceLocation,
+    _dotnet_support_for,
     generate_from_text,
     parse_input,
     validate_catalog,
@@ -48,7 +49,7 @@ class ValidateCatalogTests(unittest.TestCase):
     def test_rejects_missing_last_commit_date(self):
         catalog = {
             "repository": "owner/repo", "ref": "main", "path": "src",
-            "projects": [], "sdks": [],
+            "projects": [], "sdks": [], "dotnetSupport": [],
         }
         with self.assertRaises(GenerationError):
             validate_catalog(catalog)
@@ -56,7 +57,7 @@ class ValidateCatalogTests(unittest.TestCase):
     def test_rejects_empty_last_commit_date(self):
         catalog = {
             "repository": "owner/repo", "ref": "main", "path": "src", "lastCommitDate": "",
-            "projects": [], "sdks": [],
+            "projects": [], "sdks": [], "dotnetSupport": [],
         }
         with self.assertRaises(GenerationError):
             validate_catalog(catalog)
@@ -65,7 +66,7 @@ class ValidateCatalogTests(unittest.TestCase):
         catalog = {
             "repository": "owner/repo", "ref": "main", "path": "src", "lastCommitDate": LAST_COMMIT_DATE,
             "projects": [{"path": "src/App/App.csproj", "targetFrameworks": ["net8.0"]}],
-            "sdks": [],
+            "sdks": [], "dotnetSupport": [],
         }
         with self.assertRaises(GenerationError):
             validate_catalog(catalog, source_paths=set())
@@ -81,11 +82,36 @@ class ValidateCatalogTests(unittest.TestCase):
                 {"path": "src/Z/global.json", "version": "8.0.100"},
                 {"path": "src/A/global.json", "version": "8.0.100"},
             ],
+            "dotnetSupport": [],
         }
         result = validate_catalog(catalog, source_paths={"src/Z/Z.csproj", "src/A/A.csproj", "src/Z/global.json", "src/A/global.json"})
         self.assertEqual([item["path"] for item in result["projects"]], ["src/A/A.csproj", "src/Z/Z.csproj"])
         self.assertEqual([item["path"] for item in result["sdks"]], ["src/A/global.json", "src/Z/global.json"])
         self.assertEqual(result["lastCommitDate"], LAST_COMMIT_DATE)
+
+    def test_rejects_dotnet_support_with_invalid_support_phase(self):
+        catalog = {
+            "repository": "owner/repo", "ref": "main", "path": "src", "lastCommitDate": LAST_COMMIT_DATE,
+            "projects": [], "sdks": [],
+            "dotnetSupport": [{"targetFramework": "net8.0", "endOfSupport": "2026-11-10", "supportPhase": "GA"}],
+        }
+        with self.assertRaises(GenerationError):
+            validate_catalog(catalog)
+
+    def test_sorts_dotnet_support_by_target_framework(self):
+        catalog = {
+            "repository": "owner/repo", "ref": "main", "path": "src", "lastCommitDate": LAST_COMMIT_DATE,
+            "projects": [], "sdks": [],
+            "dotnetSupport": [
+                {"targetFramework": "net9.0", "endOfSupport": "2026-11-10", "supportPhase": "STS"},
+                {"targetFramework": "net8.0", "endOfSupport": "2026-11-10", "supportPhase": "LTS"},
+            ],
+        }
+        result = validate_catalog(catalog)
+        self.assertEqual(
+            ["net8.0", "net9.0"],
+            [item["targetFramework"] for item in result["dotnetSupport"]],
+        )
 
 
 class GenerateFromTextTests(unittest.TestCase):
@@ -103,6 +129,10 @@ class GenerateFromTextTests(unittest.TestCase):
         self.assertEqual(result["projects"], [{"path": "src/App/App.csproj", "targetFrameworks": ["net8.0"]}])
         self.assertEqual(result["sdks"], [])
         self.assertEqual(result["lastCommitDate"], LAST_COMMIT_DATE)
+        self.assertEqual(
+            result["dotnetSupport"],
+            [{"targetFramework": "net8.0", "endOfSupport": "2026-11-10", "supportPhase": "LTS"}],
+        )
 
     def test_multi_target_framework_semicolon_split(self):
         def source_loader(location, paths):
@@ -208,6 +238,79 @@ class GenerateFromTextTests(unittest.TestCase):
                 commit_date_loader=failing_commit_date_loader,
             )
         self.assertEqual(context.exception.code, "commit_lookup_failed")
+
+
+class DotnetSupportForTests(unittest.TestCase):
+    def test_resolves_known_lts_moniker(self):
+        self.assertEqual(("2026-11-10", "LTS"), _dotnet_support_for("net8.0"))
+
+    def test_resolves_known_sts_moniker(self):
+        self.assertEqual(("2026-11-10", "STS"), _dotnet_support_for("net9.0"))
+
+    def test_returns_none_none_for_dotnet_framework_moniker(self):
+        self.assertEqual((None, None), _dotnet_support_for("net472"))
+
+    def test_returns_none_none_for_dotnet_standard_moniker(self):
+        self.assertEqual((None, None), _dotnet_support_for("netstandard2.0"))
+
+    def test_returns_none_none_for_nonsense_moniker(self):
+        self.assertEqual((None, None), _dotnet_support_for("not-a-real-framework"))
+
+    def test_lookup_is_case_insensitive(self):
+        self.assertEqual(("2026-11-10", "LTS"), _dotnet_support_for("NET8.0"))
+
+
+class GenerateFromTextDotnetSupportTests(unittest.TestCase):
+    def test_multiple_projects_sharing_a_framework_produce_one_deduplicated_entry(self):
+        def source_loader(location, paths):
+            return {
+                "src/App1/App1.csproj": "<Project><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>",
+                "src/App2/App2.csproj": "<Project><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>",
+            }
+
+        blob1 = "https://github.com/owner/repo/blob/main/src/App1/App1.csproj"
+        blob2 = "https://github.com/owner/repo/blob/main/src/App2/App2.csproj"
+        result = generate_from_text(
+            '{"sourceUrl":"%s","sourceFiles":["%s","%s"]}' % (SOURCE_URL, blob1, blob2),
+            source_loader=source_loader,
+            commit_date_loader=_commit_date_loader,
+        )
+        self.assertEqual(
+            [{"targetFramework": "net8.0", "endOfSupport": "2026-11-10", "supportPhase": "LTS"}],
+            result["dotnetSupport"],
+        )
+
+    def test_unrecognized_framework_still_produces_a_null_entry(self):
+        def source_loader(location, paths):
+            return {"src/App/App.csproj": "<Project><PropertyGroup><TargetFramework>net472</TargetFramework></PropertyGroup></Project>"}
+
+        blob = "https://github.com/owner/repo/blob/main/src/App/App.csproj"
+        result = generate_from_text(
+            '{"sourceUrl":"%s","sourceFiles":["%s"]}' % (SOURCE_URL, blob),
+            source_loader=source_loader,
+            commit_date_loader=_commit_date_loader,
+        )
+        self.assertEqual(
+            [{"targetFramework": "net472", "endOfSupport": None, "supportPhase": None}],
+            result["dotnetSupport"],
+        )
+
+    def test_dotnet_support_list_is_sorted_by_target_framework(self):
+        def source_loader(location, paths):
+            return {
+                "src/App1/App1.csproj": "<Project><PropertyGroup><TargetFrameworks>net9.0;net8.0</TargetFrameworks></PropertyGroup></Project>",
+            }
+
+        blob = "https://github.com/owner/repo/blob/main/src/App1/App1.csproj"
+        result = generate_from_text(
+            '{"sourceUrl":"%s","sourceFiles":["%s"]}' % (SOURCE_URL, blob),
+            source_loader=source_loader,
+            commit_date_loader=_commit_date_loader,
+        )
+        self.assertEqual(
+            ["net8.0", "net9.0"],
+            [item["targetFramework"] for item in result["dotnetSupport"]],
+        )
 
 
 if __name__ == "__main__":

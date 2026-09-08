@@ -19,6 +19,9 @@ A hosted Foundry agent that commits validated .NET version JSON catalogs and an 
         ],
         "sdks": [
           {"path": "src/global.json", "version": "8.0.100", "rollForward": "latestMinor"}
+        ],
+        "dotnetSupport": [
+          {"targetFramework": "net8.0", "endOfSupport": "2026-11-10", "supportPhase": "LTS"}
         ]
       },
       "targetPath": "application/repo-metadata/repo-metadata.json"
@@ -29,7 +32,7 @@ A hosted Foundry agent that commits validated .NET version JSON catalogs and an 
 }
 ```
 
-`repository` and a non-empty `catalogs` array are required. Every catalog requires its original GitHub tree `sourceUrl`, the generated `catalog` (with `repository`, `ref`, `path`, `projects`, and `sdks`), and a safe JSON `targetPath`. When `targetPath` is omitted it defaults to `{sourceRepoName}/{targetDirectory or "repo-metadata"}/repo-metadata.json` -- the source repository name comes first, then the target directory. Optional fields are `targetDirectory`, `baseBranch`, `branchName`, `pullRequestTitle`, `pullRequestBody`, and `manifestFile`.
+`repository` and a non-empty `catalogs` array are required. Every catalog requires its original GitHub tree `sourceUrl`, the generated `catalog` (with `repository`, `ref`, `path`, `projects`, `sdks`, and `dotnetSupport`), and a safe JSON `targetPath`. When `targetPath` is omitted it defaults to `{sourceRepoName}/{targetDirectory or "repo-metadata"}/repo-metadata.json` -- the source repository name comes first, then the target directory. Optional fields are `targetDirectory`, `baseBranch`, `branchName`, `pullRequestTitle`, `pullRequestBody`, and `manifestFile`.
 
 The agent accepts at most 100 catalogs and 10 MiB of generated JSON per request. Unchanged files do not create a branch or pull request.
 

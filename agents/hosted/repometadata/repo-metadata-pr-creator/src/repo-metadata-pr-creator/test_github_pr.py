@@ -14,6 +14,7 @@ CATALOG = {
     "lastCommitDate": LAST_COMMIT_DATE,
     "projects": [{"path": "src/App/App.csproj", "targetFrameworks": ["net8.0"]}],
     "sdks": [{"path": "src/global.json", "version": "8.0.100"}],
+    "dotnetSupport": [{"targetFramework": "net8.0", "endOfSupport": "2026-11-10", "supportPhase": "LTS"}],
 }
 
 
@@ -66,13 +67,13 @@ class PublisherTests(unittest.TestCase):
     def test_validate_request_rejects_invalid_catalog_shape(self):
         request = payload()
         request["catalogs"][0]["catalog"] = {"repository": "source/app"}
-        with self.assertRaisesRegex(PublicationError, "repository, ref, path, lastCommitDate, projects, and sdks"):
+        with self.assertRaisesRegex(PublicationError, "repository, ref, path, lastCommitDate, projects, sdks, and dotnetSupport"):
             validate_request(request)
 
     def test_validate_request_rejects_missing_last_commit_date(self):
         request = payload()
         request["catalogs"][0]["catalog"] = {key: value for key, value in CATALOG.items() if key != "lastCommitDate"}
-        with self.assertRaisesRegex(PublicationError, "repository, ref, path, lastCommitDate, projects, and sdks"):
+        with self.assertRaisesRegex(PublicationError, "repository, ref, path, lastCommitDate, projects, sdks, and dotnetSupport"):
             validate_request(request)
 
     def test_validate_request_defaults_target_path_to_repo_first_convention(self):

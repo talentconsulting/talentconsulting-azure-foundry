@@ -199,6 +199,45 @@ def _parse_csproj(content: str) -> list[str]:
     return deduped
 
 
+# Source: https://endoflife.date/dotnet and https://learn.microsoft.com/en-us/dotnet/core/releases-and-support
+# (as of September 2026). Static reference data -- update when Microsoft ships a new major
+# version or amends a support date; this table is not fetched live.
+_DOTNET_SUPPORT_TABLE: dict[str, tuple[str, str]] = {
+    "net10.0": ("2028-11-14", "LTS"),
+    "net9.0": ("2026-11-10", "STS"),
+    "net8.0": ("2026-11-10", "LTS"),
+    "net7.0": ("2024-05-14", "STS"),
+    "net6.0": ("2024-11-12", "LTS"),
+    "net5.0": ("2022-05-10", "STS"),
+    "netcoreapp3.1": ("2022-12-13", "LTS"),
+    "netcoreapp3.0": ("2020-03-03", "STS"),
+    "netcoreapp2.2": ("2019-12-23", "STS"),
+    "netcoreapp2.1": ("2021-08-21", "LTS"),
+    "netcoreapp2.0": ("2018-10-01", "STS"),
+    "netcoreapp1.1": ("2019-06-27", "STS"),
+    "netcoreapp1.0": ("2019-06-27", "STS"),
+}
+
+
+def _dotnet_support_for(target_framework: str) -> tuple[str | None, str | None]:
+    """Look up (endOfSupport, supportPhase) for a target framework moniker.
+
+    Only modern .NET (Core-lineage) monikers -- `net5.0` through the newest entry in the table,
+    and `netcoreapp*` for pre-.NET-5 releases -- are covered. .NET Framework monikers (`net48`,
+    `net472`, `net461`, ...) and .NET Standard monikers (`netstandard2.0`, `netstandard2.1`, ...)
+    intentionally return (None, None): .NET Framework support is tied to the lifecycle of the
+    Windows version it ships with, not a fixed date of its own, and .NET Standard is a spec, not
+    a runtime with its own support lifecycle -- neither has a single correct date to report, so
+    this deliberately reports "unknown" rather than a misleading fabricated one. Lookup is
+    case-insensitive but otherwise an exact string match against the table above -- no
+    fuzzy/regex parsing of version numbers.
+    """
+    entry = _DOTNET_SUPPORT_TABLE.get(target_framework.strip().lower())
+    if entry is None:
+        return (None, None)
+    return entry
+
+
 def _parse_global_json(content: str) -> dict[str, str] | None:
     try:
         document = json.loads(content)
@@ -230,6 +269,17 @@ def _build_catalog(location: SourceLocation, sources: dict[str, str], last_commi
             sdk = _parse_global_json(content)
             if sdk is not None:
                 sdks.append({"path": path, **sdk})
+    distinct_frameworks = sorted({
+        framework for project in projects for framework in project["targetFrameworks"]
+    })
+    dotnet_support = []
+    for framework in distinct_frameworks:
+        end_of_support, support_phase = _dotnet_support_for(framework)
+        dotnet_support.append({
+            "targetFramework": framework,
+            "endOfSupport": end_of_support,
+            "supportPhase": support_phase,
+        })
     return {
         "repository": f"{location.owner}/{location.repository}",
         "ref": location.ref,
@@ -237,6 +287,7 @@ def _build_catalog(location: SourceLocation, sources: dict[str, str], last_commi
         "lastCommitDate": last_commit_date,
         "projects": projects,
         "sdks": sdks,
+        "dotnetSupport": dotnet_support,
     }
 
 
@@ -245,8 +296,13 @@ def validate_catalog(
     location: SourceLocation | None = None,
     source_paths: set[str] | None = None,
 ) -> dict[str, Any]:
-    if not isinstance(document, dict) or set(document) != {"repository", "ref", "path", "lastCommitDate", "projects", "sdks"}:
-        raise GenerationError("invalid_catalog", "Catalog must contain repository, ref, path, lastCommitDate, projects, and sdks.")
+    if not isinstance(document, dict) or set(document) != {
+        "repository", "ref", "path", "lastCommitDate", "projects", "sdks", "dotnetSupport",
+    }:
+        raise GenerationError(
+            "invalid_catalog",
+            "Catalog must contain repository, ref, path, lastCommitDate, projects, sdks, and dotnetSupport.",
+        )
     if not all(isinstance(document[field], str) for field in ("repository", "ref", "path", "lastCommitDate")):
         raise GenerationError("invalid_catalog", "Catalog repository, ref, path, and lastCommitDate must be strings.")
     if not document["lastCommitDate"]:
@@ -299,6 +355,25 @@ def validate_catalog(
             raise GenerationError("invalid_catalog", f"Duplicate sdk path {item['path']}.")
         seen_sdk_paths.add(item["path"])
 
+    dotnet_support = document["dotnetSupport"]
+    if not isinstance(dotnet_support, list):
+        raise GenerationError("invalid_catalog", "dotnetSupport must be a list.")
+    for item in dotnet_support:
+        if (
+            not isinstance(item, dict)
+            or set(item) != {"targetFramework", "endOfSupport", "supportPhase"}
+            or not isinstance(item["targetFramework"], str)
+            or not item["targetFramework"]
+            or not (item["endOfSupport"] is None or (isinstance(item["endOfSupport"], str) and item["endOfSupport"]))
+            or item["supportPhase"] not in (None, "LTS", "STS")
+        ):
+            raise GenerationError(
+                "invalid_catalog",
+                "Each dotnetSupport entry must contain targetFramework, endOfSupport, and supportPhase.",
+            )
+        # dotnetSupport entries are derived from the distinct targetFrameworks values found across
+        # projects, not sourced from one specific file -- no source_paths membership check here.
+
     return {
         "repository": document["repository"],
         "ref": document["ref"],
@@ -306,6 +381,7 @@ def validate_catalog(
         "lastCommitDate": document["lastCommitDate"],
         "projects": sorted(projects, key=lambda item: item["path"].lower()),
         "sdks": sorted(sdks, key=lambda item: item["path"].lower()),
+        "dotnetSupport": sorted(dotnet_support, key=lambda item: item["targetFramework"]),
     }
 
 

@@ -21,6 +21,7 @@ def _catalog(project_path: str, target_frameworks: list[str]) -> dict:
         "lastCommitDate": LAST_COMMIT_DATE,
         "projects": [{"path": project_path, "targetFrameworks": target_frameworks}],
         "sdks": [],
+        "dotnetSupport": [],
     }
 
 
@@ -130,6 +131,7 @@ class RunWorkflowTests(unittest.TestCase):
         catalog = result["catalogs"][0]["catalog"]
         self.assertEqual([], catalog["projects"])
         self.assertEqual([], catalog["sdks"])
+        self.assertEqual([], catalog["dotnetSupport"])
         self.assertEqual("source/app", catalog["repository"])
         self.assertEqual("main", catalog["ref"])
         self.assertEqual("src", catalog["path"])
@@ -248,11 +250,13 @@ class MergeCatalogsTests(unittest.TestCase):
             "repository": "o/r", "ref": "main", "path": "p", "lastCommitDate": LAST_COMMIT_DATE,
             "projects": [{"path": "src/App1/App1.csproj", "targetFrameworks": ["net8.0"]}],
             "sdks": [{"path": "src/global.json", "version": "8.0.100"}],
+            "dotnetSupport": [{"targetFramework": "net8.0", "endOfSupport": "2026-11-10", "supportPhase": "LTS"}],
         }
         second = {
             "repository": "o/r", "ref": "main", "path": "p", "lastCommitDate": LAST_COMMIT_DATE,
             "projects": [{"path": "src/App2/App2.csproj", "targetFrameworks": ["net9.0"]}],
             "sdks": [],
+            "dotnetSupport": [{"targetFramework": "net9.0", "endOfSupport": "2026-11-10", "supportPhase": "STS"}],
         }
 
         merged, warnings = merge_catalogs([first, second])
@@ -265,6 +269,10 @@ class MergeCatalogsTests(unittest.TestCase):
         )
         self.assertEqual([{"path": "src/global.json", "version": "8.0.100"}], merged["sdks"])
         self.assertEqual(LAST_COMMIT_DATE, merged["lastCommitDate"])
+        self.assertEqual(
+            ["net8.0", "net9.0"],
+            [item["targetFramework"] for item in merged["dotnetSupport"]],
+        )
 
         with self.assertRaisesRegex(WorkflowError, "disagree"):
             merge_catalogs([first, {**second, "path": "other"}])
@@ -274,6 +282,7 @@ class MergeCatalogsTests(unittest.TestCase):
             "repository": "o/r", "ref": "main", "path": "p", "lastCommitDate": LAST_COMMIT_DATE,
             "projects": [{"path": "src/App1/App1.csproj", "targetFrameworks": ["net8.0"]}],
             "sdks": [],
+            "dotnetSupport": [],
         }
         second = {**first, "lastCommitDate": "2024-02-02T00:00:00Z"}
 
@@ -285,6 +294,7 @@ class MergeCatalogsTests(unittest.TestCase):
             "repository": "o/r", "ref": "main", "path": "p", "lastCommitDate": LAST_COMMIT_DATE,
             "projects": [{"path": "src/App/App.csproj", "targetFrameworks": ["net8.0"]}],
             "sdks": [{"path": "src/global.json", "version": "8.0.100"}],
+            "dotnetSupport": [{"targetFramework": "net8.0", "endOfSupport": "2026-11-10", "supportPhase": "LTS"}],
         }
 
         merged, warnings = merge_catalogs([catalog, catalog])
@@ -292,6 +302,29 @@ class MergeCatalogsTests(unittest.TestCase):
         self.assertEqual([], warnings)
         self.assertEqual(1, len(merged["projects"]))
         self.assertEqual(1, len(merged["sdks"]))
+        self.assertEqual(1, len(merged["dotnetSupport"]))
+
+    def test_merge_catalogs_dedupes_dotnet_support_across_batches_by_target_framework(self):
+        first = {
+            "repository": "o/r", "ref": "main", "path": "p", "lastCommitDate": LAST_COMMIT_DATE,
+            "projects": [{"path": "src/App1/App1.csproj", "targetFrameworks": ["net8.0"]}],
+            "sdks": [],
+            "dotnetSupport": [{"targetFramework": "net8.0", "endOfSupport": "2026-11-10", "supportPhase": "LTS"}],
+        }
+        second = {
+            "repository": "o/r", "ref": "main", "path": "p", "lastCommitDate": LAST_COMMIT_DATE,
+            "projects": [{"path": "src/App2/App2.csproj", "targetFrameworks": ["net8.0"]}],
+            "sdks": [],
+            "dotnetSupport": [{"targetFramework": "net8.0", "endOfSupport": "2026-11-10", "supportPhase": "LTS"}],
+        }
+
+        merged, warnings = merge_catalogs([first, second])
+
+        self.assertEqual([], warnings)
+        self.assertEqual(
+            [{"targetFramework": "net8.0", "endOfSupport": "2026-11-10", "supportPhase": "LTS"}],
+            merged["dotnetSupport"],
+        )
 
 
 if __name__ == "__main__":

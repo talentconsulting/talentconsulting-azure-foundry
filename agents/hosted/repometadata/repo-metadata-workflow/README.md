@@ -15,7 +15,7 @@ For manifest runs, `deferPublication` is `true`: the workflow calls `repo-metada
 
 For a direct run, omit `deferPublication` and provide `targetRepository`. Optional publication fields are `targetDirectory`, `targetBaseBranch`, `branchName`, `pullRequestTitle`, and `pullRequestBody`.
 
-A repository with no `.csproj` or `global.json` files is a valid, successful outcome: an empty `repoMetadataFiles` discovery result short-circuits the generator entirely and produces an empty catalog (`projects: []`, `sdks: []`).
+A repository with no `.csproj` or `global.json` files is a valid, successful outcome: an empty `repoMetadataFiles` discovery result short-circuits the generator entirely and produces an empty catalog (`projects: []`, `sdks: []`, `dotnetSupport: []`).
 
 ## Output
 
