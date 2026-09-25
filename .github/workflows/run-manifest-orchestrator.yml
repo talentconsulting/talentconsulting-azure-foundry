@@ -115,7 +115,10 @@ jobs:
           payload=$(jq -n --arg sourceUrl "$MANIFEST_URL" '{sourceUrl: $sourceUrl}')
           echo "Payload: $payload"
           response_file="$RUNNER_TEMP/manifest-orchestrator-response.txt"
-          azd ai agent invoke "${{ steps.resolve.outputs.agent }}" "$payload" --no-prompt --output raw > "$response_file" 2>&1 || true
+          # A manifest run processes every kept entry in one call and can run well past azd's
+          # default 1800s client timeout as the manifest grows; --timeout 0 removes that client
+          # cap so the job's own GitHub Actions timeout is the only bound.
+          azd ai agent invoke "${{ steps.resolve.outputs.agent }}" "$payload" --no-prompt --timeout 0 --output raw > "$response_file" 2>&1 || true
           cat "$response_file"
 
           # --output raw prints the full HTTP response as a Server-Sent-Events stream, not a

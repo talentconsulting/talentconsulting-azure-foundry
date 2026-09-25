@@ -174,7 +174,9 @@ jobs:
           echo "Payload: $payload"
           response_file="$RUNNER_TEMP/${{ matrix.key }}-response.txt"
           agent_json_file="$RUNNER_TEMP/${{ matrix.key }}-agent-response.json"
-          azd ai agent invoke "${{ matrix.agent }}" "$payload" --no-prompt --output raw > "$response_file" 2>&1 || true
+          # A single repository can still involve substantial generation work; --timeout 0 removes
+          # azd's default 1800s client timeout so the job's own GitHub Actions timeout is the only bound.
+          azd ai agent invoke "${{ matrix.agent }}" "$payload" --no-prompt --timeout 0 --output raw > "$response_file" 2>&1 || true
           cat "$response_file"
 
           # --output raw prints the full HTTP response as a Server-Sent-Events stream, not a
