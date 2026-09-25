@@ -99,8 +99,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: dev
     env:
+      AZD_ENV_NAME: ci
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.AZURE_AI_PROJECT_ENDPOINT }}
     steps:
       - uses: actions/checkout@v4
@@ -110,7 +112,7 @@ jobs:
         run: |
           set -euo pipefail
           missing=0
-          for name in AZURE_CLIENT_ID AZURE_TENANT_ID FOUNDRY_PROJECT_ENDPOINT; do
+          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID FOUNDRY_PROJECT_ENDPOINT; do
             if [ -z "${!name}" ]; then
               echo "::error::Missing dev environment secret $name."
               missing=1
@@ -131,6 +133,23 @@ jobs:
             --client-id "$AZURE_CLIENT_ID" \
             --federated-credential-provider "github" \
             --tenant-id "$AZURE_TENANT_ID"
+
+      - name: Configure Foundry environment for invoke
+        working-directory: ${{ matrix.project_dir }}
+        shell: bash
+        # `azd ai agent invoke` resolves the current azd environment to route the call; with no
+        # environment ever created in this checkout it fails with "default environment not found".
+        # Only an environment needs to exist here (this workflow invokes an already-deployed
+        # agent, it does not provision anything), so this sets just enough for that resolution to
+        # succeed -- not the full set of vars the deploy workflows set for provisioning.
+        run: |
+          set -euo pipefail
+          azd env select "$AZD_ENV_NAME" || azd env new "$AZD_ENV_NAME" --no-prompt
+          azd env set AZURE_SUBSCRIPTION_ID "$AZURE_SUBSCRIPTION_ID"
+          azd env set AZURE_TENANT_ID "$AZURE_TENANT_ID"
+          azd env set FOUNDRY_PROJECT_ENDPOINT "$FOUNDRY_PROJECT_ENDPOINT"
+          azd env set AZURE_AI_PROJECT_ENDPOINT "$FOUNDRY_PROJECT_ENDPOINT"
+          azd env set USE_EXISTING_AI_PROJECT true
 
       - name: Run ${{ matrix.key }}
         working-directory: ${{ matrix.project_dir }}
