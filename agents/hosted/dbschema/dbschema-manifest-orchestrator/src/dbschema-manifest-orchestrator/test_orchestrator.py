@@ -28,6 +28,26 @@ def manifest(last_commit=OLD_SHA):
     ]
 
 
+def dbschema_entry(index, last_commit=""):
+    return {
+        "github-repo": f"https://github.com/source/app{index}",
+        "dbschema": {
+            "path-to-scan": "tree/main/src/Data",
+            "last-commit-hash-scanned": last_commit,
+        },
+    }
+
+
+def other_pipeline_entry(index):
+    return {
+        "github-repo": f"https://github.com/other/app{index}",
+        "specs": {
+            "path-to-scan": "tree/main/src/Api",
+            "last-commit-hash-scanned": OLD_SHA,
+        },
+    }
+
+
 class ManifestTests(unittest.TestCase):
     def test_latest_commit_rejects_a_ref_that_is_not_the_default_branch(self):
         entry = ManifestEntry(
@@ -68,7 +88,9 @@ class ManifestTests(unittest.TestCase):
             parse_request(json.dumps({"sourceUrl": MANIFEST_URL, "extra": True}))
 
     def test_validates_manifest_schema(self):
-        entry = validate_manifest(manifest(""), 25)[0]
+        entries, skipped = validate_manifest(manifest(""), 25)
+        self.assertEqual([], skipped)
+        entry = entries[0]
         self.assertEqual("source/app", entry.repository_name)
         self.assertEqual("main", entry.ref)
         self.assertEqual("https://github.com/source/app/tree/main/src/Data", entry.source_url)
@@ -89,10 +111,11 @@ class ManifestTests(unittest.TestCase):
             }
         )
 
-        entries = validate_manifest(shared, 25)
+        entries, skipped = validate_manifest(shared, 25)
 
         self.assertEqual(1, len(entries))
         self.assertEqual("source/app", entries[0].repository_name)
+        self.assertEqual([], skipped)
 
     def test_rejects_duplicate_repositories(self):
         with self.assertRaisesRegex(ManifestError, "duplicated"):
@@ -234,7 +257,8 @@ class ManifestTests(unittest.TestCase):
         legacy = manifest("")
         legacy[0]["db-schema"] = legacy[0].pop("dbschema")
 
-        entry = validate_manifest(legacy, 25)[0]
+        entries, _skipped = validate_manifest(legacy, 25)
+        entry = entries[0]
 
         self.assertEqual("db-schema", entry.manifest_node)
 
@@ -266,6 +290,83 @@ class ManifestTests(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertEqual("schema_workflow", result["failures"][0]["stage"])
         self.assertIsNone(result["pullRequest"])
+
+    def test_manifest_exceeding_max_entries_is_truncated_not_rejected(self):
+        oversized = [dbschema_entry(i) for i in range(30)]
+
+        entries, skipped = validate_manifest(oversized, 25)
+
+        self.assertEqual(25, len(entries))
+        self.assertEqual([f"source/app{i}" for i in range(25, 30)], skipped)
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "workflow":
+                return {
+                    "success": True,
+                    "schemas": [{"sourceUrl": payload["sourceUrl"], "schema": SCHEMA}],
+                }
+            return {"success": True, "status": "created"}
+
+        result = run_manifest(
+            object(),
+            {"sourceUrl": MANIFEST_URL},
+            "workflow",
+            "publisher",
+            "gpt-4o",
+            manifest_loader=lambda blob: oversized,
+            commit_resolver=lambda entry: NEW_SHA,
+            invoker=invoke,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertTrue(result["truncated"])
+        self.assertEqual(5, result["skippedCount"])
+        self.assertEqual([f"source/app{i}" for i in range(25, 30)], result["skippedRepositories"])
+        self.assertEqual(25, result["checkedCount"])
+        self.assertEqual(25, result["changedCount"])
+        self.assertEqual(25, result["generatedRepositoryCount"])
+        self.assertEqual(25, result["generatedSchemaCount"])
+        self.assertIsNotNone(result["pullRequest"])
+
+    def test_entries_for_other_pipelines_do_not_count_against_this_caps(self):
+        shared = [other_pipeline_entry(i) for i in range(30)] + [dbschema_entry(100), dbschema_entry(101)]
+
+        entries, skipped = validate_manifest(shared, 25)
+
+        self.assertEqual(2, len(entries))
+        self.assertEqual([], skipped)
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "workflow":
+                return {
+                    "success": True,
+                    "schemas": [{"sourceUrl": payload["sourceUrl"], "schema": SCHEMA}],
+                }
+            return {"success": True, "status": "created"}
+
+        result = run_manifest(
+            object(),
+            {"sourceUrl": MANIFEST_URL},
+            "workflow",
+            "publisher",
+            "gpt-4o",
+            manifest_loader=lambda blob: shared,
+            commit_resolver=lambda entry: NEW_SHA,
+            invoker=invoke,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertFalse(result["truncated"])
+        self.assertEqual(0, result["skippedCount"])
+        self.assertEqual([], result["skippedRepositories"])
+        self.assertEqual(2, result["checkedCount"])
+
+    def test_malformed_entry_beyond_the_cap_still_raises_during_validation(self):
+        oversized = [dbschema_entry(i) for i in range(31)]
+        oversized[30]["dbschema"] = {"path-to-scan": "tree/main/src/Data"}  # missing last-commit-hash-scanned
+
+        with self.assertRaisesRegex(ManifestError, "entry 30.db-schema"):
+            validate_manifest(oversized, 25)
 
 
 if __name__ == "__main__":

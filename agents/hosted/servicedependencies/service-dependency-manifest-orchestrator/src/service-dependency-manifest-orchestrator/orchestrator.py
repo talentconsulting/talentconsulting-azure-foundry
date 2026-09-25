@@ -153,11 +153,9 @@ def _parse_repository(value: object, label: str) -> tuple[str, str, str]:
     return owner, repository, f"https://github.com/{owner}/{repository}"
 
 
-def validate_manifest(value: object, max_entries: int) -> list[ManifestEntry]:
+def validate_manifest(value: object, max_entries: int) -> tuple[list[ManifestEntry], list[str]]:
     if not isinstance(value, list) or not value:
         raise ManifestError("invalid_manifest", "The manifest root must be a non-empty array.")
-    if len(value) > max_entries:
-        raise ManifestError("manifest_too_large", f"The manifest may contain at most {max_entries} entries.")
     entries: list[ManifestEntry] = []
     repositories: set[str] = set()
     for index, item in enumerate(value):
@@ -194,7 +192,11 @@ def validate_manifest(value: object, max_entries: int) -> list[ManifestEntry]:
             path_to_scan="/".join(path_parts),
             last_commit=last_commit,
         ))
-    return entries
+    skipped_repositories: list[str] = []
+    if len(entries) > max_entries:
+        skipped_repositories = [entry.repository_name for entry in entries[max_entries:]]
+        entries = entries[:max_entries]
+    return entries, skipped_repositories
 
 
 def _default_branch(entry: ManifestEntry) -> str:
@@ -309,7 +311,7 @@ def run_manifest(
 ) -> dict[str, Any]:
     blob = parse_blob_url(request["sourceUrl"])
     manifest = manifest_loader(blob)
-    entries = validate_manifest(manifest, max_entries)
+    entries, skipped_repositories = validate_manifest(manifest, max_entries)
     updated_manifest = copy.deepcopy(manifest)
     up_to_date: list[dict[str, str]] = []
     changed: list[tuple[ManifestEntry, str]] = []
@@ -338,6 +340,9 @@ def run_manifest(
             "sourceUrl": request["sourceUrl"],
             "checkedCount": len(entries),
             "changedCount": 0,
+            "truncated": bool(skipped_repositories),
+            "skippedCount": len(skipped_repositories),
+            "skippedRepositories": skipped_repositories,
             "generatedRepositoryCount": 0,
             "generatedCatalogCount": 0,
             "upToDate": up_to_date,
@@ -376,6 +381,9 @@ def run_manifest(
             "sourceUrl": request["sourceUrl"],
             "checkedCount": len(entries),
             "changedCount": len(changed),
+            "truncated": bool(skipped_repositories),
+            "skippedCount": len(skipped_repositories),
+            "skippedRepositories": skipped_repositories,
             "generatedRepositoryCount": 0,
             "generatedCatalogCount": 0,
             "upToDate": up_to_date,
@@ -407,6 +415,9 @@ def run_manifest(
         "sourceUrl": request["sourceUrl"],
         "checkedCount": len(entries),
         "changedCount": len(changed),
+        "truncated": bool(skipped_repositories),
+        "skippedCount": len(skipped_repositories),
+        "skippedRepositories": skipped_repositories,
         "generatedRepositoryCount": len(generated_repositories),
         "generatedCatalogCount": len(combined_catalogs),
         "generatedRepositories": generated_repositories,
