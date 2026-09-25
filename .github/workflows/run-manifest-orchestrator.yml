@@ -36,7 +36,6 @@ jobs:
       AZD_ENV_NAME: ci
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.AZURE_AI_PROJECT_ENDPOINT }}
     steps:
       - uses: actions/checkout@v4
@@ -64,7 +63,7 @@ jobs:
         run: |
           set -euo pipefail
           missing=0
-          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID FOUNDRY_PROJECT_ENDPOINT; do
+          for name in AZURE_CLIENT_ID AZURE_TENANT_ID FOUNDRY_PROJECT_ENDPOINT; do
             if [ -z "${!name}" ]; then
               echo "::error::Missing dev environment secret $name."
               missing=1
@@ -94,10 +93,13 @@ jobs:
         # Only an environment needs to exist here (this workflow invokes an already-deployed
         # agent, it does not provision anything), so this sets just enough for that resolution to
         # succeed -- not the full set of vars the deploy workflows set for provisioning.
+        # Deliberately no AZURE_SUBSCRIPTION_ID: the deploy workflows delete it before their own
+        # `azd ai agent show`/`invoke` calls for the same reason (see their "Clear cached
+        # subscription ID" step) -- azd's tenant lookup for a discoverable subscription ID has no
+        # service-principal fast path and fails auth for this identity when it's set.
         run: |
           set -euo pipefail
           azd env select "$AZD_ENV_NAME" || azd env new "$AZD_ENV_NAME" --no-prompt
-          azd env set AZURE_SUBSCRIPTION_ID "$AZURE_SUBSCRIPTION_ID"
           azd env set AZURE_TENANT_ID "$AZURE_TENANT_ID"
           azd env set FOUNDRY_PROJECT_ENDPOINT "$FOUNDRY_PROJECT_ENDPOINT"
           azd env set AZURE_AI_PROJECT_ENDPOINT "$FOUNDRY_PROJECT_ENDPOINT"
