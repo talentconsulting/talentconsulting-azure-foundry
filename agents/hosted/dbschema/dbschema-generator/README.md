@@ -43,7 +43,8 @@ The response is the database representation itself, without Markdown or a wrappe
         }
       ],
       "relationships": [],
-      "indexes": []
+      "indexes": [],
+      "hasPii": false
     }
   ],
   "types": []
@@ -51,6 +52,8 @@ The response is the database representation itself, without Markdown or a wrappe
 ```
 
 Defaults are stored as SQL-expression strings; numeric and Boolean defaults are normalised to strings (for example, `0` becomes `"0"`). Unknown scalar values are `null`. The generator does not invent structures that are not evidenced by the selected source files.
+
+Each table's `hasPii` is the model's best-effort judgement on whether any of its columns plausibly holds personal data about an identifiable individual (names, contact details, dates of birth, national/personal identifiers, or special-category data such as health, ethnicity, or disability information). It is a heuristic flag for a human data-protection reviewer to check, evaluated only from column names, types, and surrounding source code -- never from live data -- and is not a certified compliance determination on its own.
 
 ## Safety and limits
 

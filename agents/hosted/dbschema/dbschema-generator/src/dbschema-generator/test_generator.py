@@ -59,6 +59,7 @@ SCHEMA = {
                     "filter": None,
                 }
             ],
+            "hasPii": False,
         }
     ],
     "types": [{"name": "order_status", "kind": "enum", "values": ["draft", "placed"]}],
@@ -127,6 +128,26 @@ class SchemaTests(unittest.TestCase):
         invalid = json.loads(json.dumps(SCHEMA))
         invalid["tables"][0].pop("indexes")
         with self.assertRaisesRegex(GenerationError, "invalid shape"):
+            validate_database_schema(invalid)
+
+    def test_accepts_a_table_flagged_as_having_pii(self):
+        schema = json.loads(json.dumps(SCHEMA))
+        schema["tables"][0]["hasPii"] = True
+
+        result = validate_database_schema(schema)
+
+        self.assertTrue(result["tables"][0]["hasPii"])
+
+    def test_rejects_missing_has_pii_field(self):
+        invalid = json.loads(json.dumps(SCHEMA))
+        invalid["tables"][0].pop("hasPii")
+        with self.assertRaisesRegex(GenerationError, "invalid shape"):
+            validate_database_schema(invalid)
+
+    def test_rejects_non_boolean_has_pii(self):
+        invalid = json.loads(json.dumps(SCHEMA))
+        invalid["tables"][0]["hasPii"] = "yes"
+        with self.assertRaisesRegex(GenerationError, "hasPii must be a boolean"):
             validate_database_schema(invalid)
 
     def test_normalises_scalar_column_defaults_to_sql_text(self):

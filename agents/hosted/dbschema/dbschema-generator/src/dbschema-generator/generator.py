@@ -75,7 +75,11 @@ invent tables, columns, keys, relationships, indexes, database engines, defaults
 Return only one JSON object with exactly these top-level properties: database, tables, types.
 database must contain exactly name and engine; either may be null when the source does not establish
 it. tables must contain every evidenced table. Each table must contain exactly name, schema, entity,
-columns, relationships, indexes. Each column must contain exactly name, type, nullable, primaryKey,
+columns, relationships, indexes, hasPii. hasPii is a boolean: true when any of the table's columns
+plausibly holds personal data about an identifiable individual (for example a name, email address,
+phone number, physical address, date of birth, national insurance or other personal identifier, or
+special category data such as health, ethnicity, or disability information); false when no such
+column is evidenced. Each column must contain exactly name, type, nullable, primaryKey,
 generated, default, ordinal. Preserve physical column order with a one-based ordinal when known and
 use null when unknown. Each relationship must contain exactly name, type, fromColumns, targetTable,
 targetColumns, onDelete. Relationship type must be one-to-one, one-to-many, many-to-one, or
@@ -347,13 +351,15 @@ def validate_database_schema(document: object) -> dict[str, object]:
     for table_index, table in enumerate(tables):
         label = f"tables[{table_index}]"
         if not isinstance(table, dict) or set(table) != {
-            "name", "schema", "entity", "columns", "relationships", "indexes"
+            "name", "schema", "entity", "columns", "relationships", "indexes", "hasPii"
         }:
             raise GenerationError("invalid_model_output", f"{label} has an invalid shape.")
         if not isinstance(table["name"], str) or not table["name"]:
             raise GenerationError("invalid_model_output", f"{label}.name must be a non-empty string.")
         _nullable_string(table["schema"], f"{label}.schema")
         _nullable_string(table["entity"], f"{label}.entity")
+        if not isinstance(table["hasPii"], bool):
+            raise GenerationError("invalid_model_output", f"{label}.hasPii must be a boolean.")
         identity = (table["schema"], table["name"])
         if identity in table_names:
             raise GenerationError("invalid_model_output", f"{label} duplicates a table name.")

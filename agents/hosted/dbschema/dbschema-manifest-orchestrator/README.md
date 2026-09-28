@@ -64,7 +64,8 @@ Each deferred workflow returns the database representation in its `schemas` arra
         }
       ],
       "relationships": [],
-      "indexes": []
+      "indexes": [],
+      "hasPii": false
     }
   ],
   "types": []
