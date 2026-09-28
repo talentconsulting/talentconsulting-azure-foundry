@@ -1,4 +1,5 @@
 import json
+import threading
 import unittest
 
 from workflow import WorkflowError, merge_schemas, parse_workflow_request, run_workflow, validate_schema
@@ -114,6 +115,7 @@ class WorkflowTests(unittest.TestCase):
             "publisher",
             "gpt-4o",
             invoker=invoke,
+            retry_delay_seconds=0,
         )
         self.assertFalse(result["success"])
         self.assertEqual(["discovery", "generator", "generator", "generator"], calls)
@@ -138,6 +140,7 @@ class WorkflowTests(unittest.TestCase):
             "publisher",
             "gpt-4o",
             invoker=invoke,
+            retry_delay_seconds=0,
         )
 
         self.assertTrue(result["success"])
@@ -166,8 +169,66 @@ class WorkflowTests(unittest.TestCase):
         )
 
         self.assertTrue(result["success"])
-        self.assertEqual([files[0:3], files[3:6], files[6:7]], generator_calls)
+        self.assertCountEqual([files[0:3], files[3:6], files[6:7]], generator_calls)
         self.assertEqual(3, len(result["schemas"][0]["schema"]["tables"]))
+
+    def test_batches_are_generated_concurrently(self):
+        files = [f"https://github.com/source/app/blob/main/src/Data/Table{index}.cs" for index in range(9)]
+        discovery = {"schemaFiles": files, "excludedFiles": []}
+        # Fails with BrokenBarrierError unless all three batches are in flight at once.
+        barrier = threading.Barrier(3, timeout=5)
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "discovery":
+                return discovery
+            barrier.wait()
+            return _table_schema(payload["sourceFiles"][0].rsplit("/", 1)[1])
+
+        result = run_workflow(
+            object(),
+            {"sourceUrl": SOURCE, "deferPublication": True},
+            "discovery", "generator",
+            "publisher",
+            "gpt-4o",
+            generator_batch_size=3,
+            generator_concurrency=3,
+            invoker=invoke,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(3, len(result["schemas"][0]["schema"]["tables"]))
+
+    def test_merge_follows_batch_order_not_completion_order(self):
+        files = [f"https://github.com/source/app/blob/main/src/Data/Table{index}.cs" for index in range(6)]
+        discovery = {"schemaFiles": files, "excludedFiles": []}
+        second_done = threading.Event()
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "discovery":
+                return discovery
+            schema = _table_schema("orders")
+            if payload["sourceFiles"] == files[0:3]:
+                # The first batch finishes last, but its copy of "orders" must still win.
+                second_done.wait(timeout=5)
+                schema["tables"][0]["entity"] = "FirstBatch"
+            else:
+                schema["tables"][0]["entity"] = "SecondBatch"
+                second_done.set()
+            return schema
+
+        result = run_workflow(
+            object(),
+            {"sourceUrl": SOURCE, "deferPublication": True},
+            "discovery", "generator",
+            "publisher",
+            "gpt-4o",
+            generator_batch_size=3,
+            generator_concurrency=2,
+            invoker=invoke,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual("FirstBatch", result["schemas"][0]["schema"]["tables"][0]["entity"])
 
     def test_a_cross_batch_name_collision_keeps_the_first_table_and_still_succeeds(self):
         files = [f"https://github.com/source/app/blob/main/src/Data/Table{index}.cs" for index in range(6)]
@@ -217,6 +278,7 @@ class WorkflowTests(unittest.TestCase):
             "gpt-4o",
             generator_batch_size=3,
             invoker=invoke,
+            retry_delay_seconds=0,
         )
 
         self.assertTrue(result["success"])
@@ -244,6 +306,7 @@ class WorkflowTests(unittest.TestCase):
             "gpt-4o",
             generator_batch_size=3,
             invoker=invoke,
+            retry_delay_seconds=0,
         )
 
         self.assertFalse(result["success"])

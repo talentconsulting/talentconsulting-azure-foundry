@@ -32,7 +32,7 @@ The manifest must use this schema:
 
 ## Behavior
 
-For every changed manifest entry, the agent calls `dbschema-workflow` once with that entry's repository tree URL and `deferPublication: true`. Each workflow invokes `dbschema-generator`. Complete results are combined and sent once to `dbschema-pr-creator`:
+For every changed manifest entry, the agent calls `dbschema-workflow` once with that entry's repository tree URL and `deferPublication: true`. Each workflow invokes `dbschema-generator`. Up to `DBSCHEMA_MANIFEST_WORKFLOW_CONCURRENCY` workflows (default 4) run at once; results are still processed in manifest order, so the PR content and manifest hashes do not depend on which repository finishes first. Complete results are combined and sent once to `dbschema-pr-creator`:
 
 - Destination repository: the repository containing the manifest.
 - Base branch: the ref in the manifest blob URL.

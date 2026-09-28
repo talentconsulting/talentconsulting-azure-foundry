@@ -1,4 +1,5 @@
 import json
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -280,6 +281,40 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(2, result["generatedRepositoryCount"])
         self.assertEqual(2, result["generatedSchemaCount"])
         self.assertEqual(["workflow", "workflow", "publisher"], calls)
+
+    def test_repositories_are_generated_concurrently_and_published_in_manifest_order(self):
+        repos = manifest() + [dict(manifest()[0], **{"github-repo": f"https://github.com/source/app{index}"}) for index in (2, 3)]
+        # Fails with BrokenBarrierError unless all three workflows are in flight at once.
+        barrier = threading.Barrier(3, timeout=5)
+        published = []
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "workflow":
+                barrier.wait()
+                return {
+                    "success": True,
+                    "schemas": [{"sourceUrl": payload["sourceUrl"], "schema": SCHEMA}],
+                }
+            published.append(payload)
+            return {"success": True, "status": "created"}
+
+        result = run_manifest(
+            object(),
+            {"sourceUrl": MANIFEST_URL},
+            "workflow",
+            "publisher",
+            "gpt-4o",
+            workflow_concurrency=3,
+            manifest_loader=lambda blob: repos,
+            commit_resolver=lambda entry: NEW_SHA,
+            invoker=invoke,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(
+            ["app/db-schema/database.schema.json", "app2/db-schema/database.schema.json", "app3/db-schema/database.schema.json"],
+            [schema["targetPath"] for schema in published[0]["schemas"]],
+        )
 
     def test_legacy_db_schema_node_remains_supported(self):
         legacy = manifest("")

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import re
+import time
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable
 
 
@@ -198,9 +200,13 @@ def _generate_batch(
     batch: list[str],
     invoker: Callable[..., Any],
     max_attempts: int = 3,
+    retry_delay_seconds: float = 5.0,
 ) -> dict[str, Any]:
     last_error: Exception | None = None
-    for _ in range(max(1, max_attempts)):
+    for attempt in range(max(1, max_attempts)):
+        if attempt:
+            # Back off before retrying so concurrent batches do not hammer a throttled model deployment.
+            time.sleep(retry_delay_seconds * 2 ** (attempt - 1))
         try:
             return validate_schema(
                 invoker(project, generator_name, model, {"sourceUrl": source_url, "sourceFiles": batch}, max_attempts=1)
@@ -244,7 +250,9 @@ def run_workflow(
     model: str,
     max_files: int = 100,
     generator_batch_size: int = 5,
+    generator_concurrency: int = 3,
     invoker: Callable[..., Any] = invoke_agent,
+    retry_delay_seconds: float = 5.0,
 ) -> dict[str, Any]:
     request = parse_workflow_request(json.dumps(request))
     source_url = request["sourceUrl"]
@@ -257,10 +265,25 @@ def run_workflow(
             schema_files[index : index + generator_batch_size]
             for index in range(0, len(schema_files), generator_batch_size)
         ]
+        with ThreadPoolExecutor(max_workers=max(1, generator_concurrency)) as executor:
+            futures = [
+                executor.submit(
+                    _generate_batch,
+                    project,
+                    generator_name,
+                    model,
+                    source_url,
+                    batch,
+                    invoker,
+                    retry_delay_seconds=retry_delay_seconds,
+                )
+                for batch in batches
+            ]
+        # Collect in batch order, not completion order, so merge_schemas keeps the same first occurrence.
         batch_schemas = []
-        for batch in batches:
+        for batch, future in zip(batches, futures):
             try:
-                batch_schemas.append(_generate_batch(project, generator_name, model, source_url, batch, invoker))
+                batch_schemas.append(future.result())
             except Exception as error:
                 batch_errors.append(
                     {

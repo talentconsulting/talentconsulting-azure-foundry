@@ -35,6 +35,8 @@ services:
         value: ${DBSCHEMA_DISCOVERY_MAX_FILES}
       - name: DBSCHEMA_GENERATOR_BATCH_SIZE
         value: ${DBSCHEMA_GENERATOR_BATCH_SIZE}
+      - name: DBSCHEMA_GENERATOR_CONCURRENCY
+        value: ${DBSCHEMA_GENERATOR_CONCURRENCY}
     kind: hosted
     name: dbschema-workflow
     displayName: Database Schema Workflow

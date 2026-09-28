@@ -27,6 +27,7 @@ WORKFLOW_NAME = os.getenv("DBSCHEMA_WORKFLOW_AGENT_NAME", "dbschema-workflow")
 PUBLISHER_NAME = os.getenv("DBSCHEMA_PR_CREATOR_AGENT_NAME", "dbschema-pr-creator")
 MAX_ENTRIES = int(os.getenv("DBSCHEMA_MANIFEST_MAX_ENTRIES", "25"))
 MAX_SCHEMAS = int(os.getenv("DBSCHEMA_MANIFEST_MAX_SCHEMAS", "100"))
+WORKFLOW_CONCURRENCY = int(os.getenv("DBSCHEMA_MANIFEST_WORKFLOW_CONCURRENCY", "4"))
 if not PROJECT_ENDPOINT:
     raise EnvironmentError("FOUNDRY_PROJECT_ENDPOINT is required.")
 
@@ -77,6 +78,7 @@ async def handle_create(
             MODEL,
             MAX_ENTRIES,
             MAX_SCHEMAS,
+            WORKFLOW_CONCURRENCY,
         )
     except Exception as error:
         logger.exception("Manifest-driven database-schema orchestration failed.")
