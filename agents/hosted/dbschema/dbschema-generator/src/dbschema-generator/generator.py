@@ -79,7 +79,13 @@ columns, relationships, indexes, hasPii. hasPii is a boolean: true when any of t
 plausibly holds personal data about an identifiable individual (for example a name, email address,
 phone number, physical address, date of birth, national insurance or other personal identifier, or
 special category data such as health, ethnicity, or disability information); false when no such
-column is evidenced. Each column must contain exactly name, type, nullable, primaryKey,
+column is evidenced. Judge what a column describes, not its name alone: a Name, Title, or
+FileName column on a reference, lookup, catalogue, configuration, or audit/import-log table (for
+example a course, framework, standard, route, product, or file) names that thing, not a person, and
+is not personal data. Timestamps, row counts, and codes describing a process or record are not
+personal data either. Set hasPii true only when the table's rows are evidently about individual
+people (for example users, learners, apprentices, employees, contacts, or applicants) or a column
+clearly holds a person's details (for example FirstName, Email, CreatedByUserEmail). Each column must contain exactly name, type, nullable, primaryKey,
 generated, default, ordinal. Preserve physical column order with a one-based ordinal when known and
 use null when unknown. Each relationship must contain exactly name, type, fromColumns, targetTable,
 targetColumns, onDelete. Relationship type must be one-to-one, one-to-many, many-to-one, or
