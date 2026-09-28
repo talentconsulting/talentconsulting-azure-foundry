@@ -17,7 +17,11 @@ app = ResponsesAgentServerHost()
 
 def error_response(error: Exception) -> dict[str, object]:
     code = error.code if isinstance(error, PublicationError) else "publication_failed"
-    message = str(error) if isinstance(error, PublicationError) else "The database schemas could not be published."
+    message = (
+        str(error)
+        if isinstance(error, PublicationError)
+        else f"The database schemas could not be published ({type(error).__name__}: {error})"[:300]
+    )
     return {
         "success": False, "status": "failed", "repository": "", "branchName": "", "commitSha": "",
         "pullRequestUrl": "", "pullRequestNumber": 0, "filesWritten": [],

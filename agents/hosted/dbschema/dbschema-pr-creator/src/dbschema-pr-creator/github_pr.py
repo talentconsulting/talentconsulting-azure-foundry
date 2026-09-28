@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import base64
+import http.client
 import json
 import os
 import posixpath
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -20,12 +22,22 @@ MAX_SCHEMAS = 100
 MAX_TOTAL_BYTES = 10 * 1024 * 1024
 REPOSITORY_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 BRANCH_PATTERN = re.compile(r"^[A-Za-z0-9._/-]+$")
+TRANSIENT_HTTP_STATUSES = {500, 502, 503, 504}
+# Creating a blob, tree, or commit is content-addressed and invisible until a ref points at it, so a
+# repeat is harmless; creating a ref or pull request is not, and is never retried.
+REPEATABLE_POST_SUFFIXES = ("/git/blobs", "/git/trees", "/git/commits")
 
 
 class PublicationError(ValueError):
     def __init__(self, code: str, message: str):
         super().__init__(message)
         self.code = code
+
+
+class _TransientGitHubError(Exception):
+    def __init__(self, publication_error: PublicationError):
+        super().__init__(str(publication_error))
+        self.publication_error = publication_error
 
 
 @dataclass(frozen=True)
@@ -36,13 +48,34 @@ class PlannedFile:
 
 
 class GitHubClient:
-    def __init__(self, token: str, api_url: str = "https://api.github.com"):
+    def __init__(
+        self,
+        token: str,
+        api_url: str = "https://api.github.com",
+        max_attempts: int = 3,
+        retry_delay_seconds: float = 2.0,
+    ):
         if not token:
             raise PublicationError("missing_github_token", "GITHUB_PR_TOKEN is not configured.")
         self.token = token
         self.api_url = api_url.rstrip("/")
+        self.max_attempts = max(1, max_attempts)
+        self.retry_delay_seconds = retry_delay_seconds
 
     def request(self, method: str, path: str, payload: object | None = None) -> Any:
+        repeatable = method == "GET" or (method == "POST" and path.endswith(REPEATABLE_POST_SUFFIXES))
+        attempts = self.max_attempts if repeatable else 1
+        for attempt in range(attempts):
+            if attempt:
+                time.sleep(self.retry_delay_seconds * 2 ** (attempt - 1))
+            try:
+                return self._request_once(method, path, payload)
+            except _TransientGitHubError as error:
+                if attempt == attempts - 1:
+                    raise error.publication_error from error.__cause__
+        raise AssertionError("unreachable")
+
+    def _request_once(self, method: str, path: str, payload: object | None) -> Any:
         body = None
         headers = {
             "Accept": "application/vnd.github+json",
@@ -55,7 +88,7 @@ class GitHubClient:
             headers["Content-Type"] = "application/json"
         request = urllib.request.Request(f"{self.api_url}{path}", data=body, headers=headers, method=method)
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
+            with urllib.request.urlopen(request, timeout=60) as response:
                 response_body = response.read()
         except urllib.error.HTTPError as error:
             detail = ""
@@ -66,9 +99,15 @@ class GitHubClient:
             message = f"GitHub API returned HTTP {error.code}."
             if detail:
                 message += f" {detail}"
+            if error.code in TRANSIENT_HTTP_STATUSES:
+                raise _TransientGitHubError(PublicationError("github_api_error", message)) from error
             raise PublicationError("github_api_error", message) from error
-        except urllib.error.URLError as error:
-            raise PublicationError("github_unavailable", "The GitHub API could not be reached.") from error
+        except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.HTTPException) as error:
+            # urlopen raises bare TimeoutError / ConnectionResetError / RemoteDisconnected for read-phase
+            # failures, not URLError, so they must be caught explicitly.
+            raise _TransientGitHubError(
+                PublicationError("github_unavailable", f"The GitHub API could not be reached ({type(error).__name__}).")
+            ) from error
         return json.loads(response_body.decode("utf-8")) if response_body else {}
 
 
