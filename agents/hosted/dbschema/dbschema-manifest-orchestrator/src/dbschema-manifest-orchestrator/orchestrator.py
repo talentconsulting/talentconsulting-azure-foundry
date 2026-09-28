@@ -309,7 +309,7 @@ def _validate_workflow_output(value: Any, entry: ManifestEntry) -> list[dict[str
     schema = item["schema"]
     if not isinstance(schema, dict) or set(schema) != {"database", "tables", "types"}:
         raise ManifestError("invalid_workflow_output", "Database-schema workflow returned an invalid schema.")
-    if not isinstance(schema["database"], dict) or not isinstance(schema["tables"], list) or not schema["tables"] or not isinstance(schema["types"], list):
+    if not isinstance(schema["database"], dict) or not isinstance(schema["tables"], list) or not isinstance(schema["types"], list):
         raise ManifestError("invalid_workflow_output", "Database-schema workflow returned an incomplete schema.")
     return [
         {

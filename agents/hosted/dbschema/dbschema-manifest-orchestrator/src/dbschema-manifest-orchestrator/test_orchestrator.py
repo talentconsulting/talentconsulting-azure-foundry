@@ -223,6 +223,34 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(1, len(result["generatedRepositories"][0]["warnings"]))
         self.assertIn("invalid shape", result["generatedRepositories"][0]["warnings"][0]["message"])
 
+    def test_schema_without_tables_is_published_and_updates_the_manifest(self):
+        empty = {"database": {"name": None, "engine": None}, "tables": [], "types": []}
+        published = []
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "workflow":
+                return {
+                    "success": True,
+                    "schemas": [{"sourceUrl": payload["sourceUrl"], "schema": empty}],
+                }
+            published.append(payload)
+            return {"success": True, "status": "created"}
+
+        result = run_manifest(
+            object(),
+            {"sourceUrl": MANIFEST_URL},
+            "workflow",
+            "publisher",
+            "gpt-4o",
+            manifest_loader=lambda blob: manifest(),
+            commit_resolver=lambda entry: NEW_SHA,
+            invoker=invoke,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual([], published[0]["schemas"][0]["schema"]["tables"])
+        self.assertEqual(NEW_SHA, published[0]["manifestFile"]["content"][0]["dbschema"]["last-commit-hash-scanned"])
+
     def test_calls_workflow_once_for_every_changed_dbschema_repository(self):
         second = manifest()
         second[0]["github-repo"] = "https://github.com/source/accounts"
