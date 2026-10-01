@@ -1,0 +1,22 @@
+name: Fetch Repository Topics
+
+on:
+  workflow_dispatch: {}
+  # Topic changes never move a branch head, so poll for them. Runs where nothing
+  # changed write identical files and open no pull request.
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  fetch-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch topics for every manifest repository
+        env:
+          GITHUB_PR_TOKEN: ${{ secrets.SERVICE_CATALOGUE_PR_TOKEN }}
+        run: python3 scripts/fetch_repo_topics.py
