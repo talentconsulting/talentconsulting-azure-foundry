@@ -26,7 +26,7 @@ MODEL = os.getenv("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-4o")
 DISCOVERY_NAME = os.getenv("DISCOVERY_AGENT_NAME", "openapi-source-discovery")
 WORKFLOW_NAME = os.getenv("SPEC_WORKFLOW_AGENT_NAME", "openapi-spec-workflow")
 PUBLISHER_NAME = os.getenv("SPEC_PR_CREATOR_AGENT_NAME", "openapi-spec-pr-creator")
-MAX_ENTRIES = int(os.getenv("OPENAPI_MANIFEST_MAX_ENTRIES", "25"))
+MAX_ENTRIES = int(os.getenv("OPENAPI_MANIFEST_MAX_ENTRIES", "100"))
 MAX_SPECS = int(os.getenv("OPENAPI_MANIFEST_MAX_SPECS", "100"))
 BATCH_SIZE = int(os.getenv("OPENAPI_MANIFEST_BATCH_SIZE", "30"))
 if not PROJECT_ENDPOINT:

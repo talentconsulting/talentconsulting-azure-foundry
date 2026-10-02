@@ -25,7 +25,7 @@ PROJECT_ENDPOINT = os.getenv("FOUNDRY_PROJECT_ENDPOINT") or os.getenv("AZURE_AI_
 MODEL = os.getenv("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-4o")
 GENERATOR_NAME = os.getenv("SYSTEM_SUMMARY_GENERATOR_AGENT_NAME", "system-summary-generator")
 PUBLISHER_NAME = os.getenv("SYSTEM_SUMMARY_PR_CREATOR_AGENT_NAME", "system-summary-pr-creator")
-MAX_ENTRIES = int(os.getenv("SYSTEM_SUMMARY_MANIFEST_MAX_ENTRIES", "50"))
+MAX_ENTRIES = int(os.getenv("SYSTEM_SUMMARY_MANIFEST_MAX_ENTRIES", "100"))
 if not PROJECT_ENDPOINT:
     raise EnvironmentError("FOUNDRY_PROJECT_ENDPOINT is required.")
 

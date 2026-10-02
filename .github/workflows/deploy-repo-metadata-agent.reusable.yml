@@ -95,7 +95,7 @@ jobs:
           azd env set REPO_METADATA_WORKFLOW_AGENT_NAME repo-metadata-workflow
           azd env set REPO_METADATA_DISCOVERY_MAX_FILES 100
           azd env set REPO_METADATA_GENERATOR_BATCH_SIZE 5
-          azd env set REPO_METADATA_MANIFEST_MAX_ENTRIES 25
+          azd env set REPO_METADATA_MANIFEST_MAX_ENTRIES 100
           azd env set REPO_METADATA_MANIFEST_MAX_CATALOGS 100
 
       - name: Run unit tests

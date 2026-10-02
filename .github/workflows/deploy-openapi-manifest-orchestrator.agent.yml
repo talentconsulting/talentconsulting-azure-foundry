@@ -29,7 +29,7 @@ jobs:
       DISCOVERY_AGENT_NAME: openapi-source-discovery
       SPEC_WORKFLOW_AGENT_NAME: openapi-spec-workflow
       SPEC_PR_CREATOR_AGENT_NAME: openapi-spec-pr-creator
-      OPENAPI_MANIFEST_MAX_ENTRIES: "25"
+      OPENAPI_MANIFEST_MAX_ENTRIES: "100"
       OPENAPI_MANIFEST_MAX_SPECS: "100"
       OPENAPI_MANIFEST_BATCH_SIZE: "30"
     steps:

@@ -29,7 +29,7 @@ jobs:
       AZURE_AI_PROJECT_NAME: ${{ vars.AZURE_AI_PROJECT_NAME || 'talent-day-proj-default' }}
       EVENTCATALOG_WORKFLOW_AGENT_NAME: eventcatalog-workflow
       EVENTCATALOG_PR_CREATOR_AGENT_NAME: eventcatalog-pr-creator
-      EVENTCATALOG_MANIFEST_MAX_ENTRIES: "25"
+      EVENTCATALOG_MANIFEST_MAX_ENTRIES: "100"
       EVENTCATALOG_MANIFEST_MAX_CATALOGS: "100"
     steps:
       - uses: actions/checkout@v4
