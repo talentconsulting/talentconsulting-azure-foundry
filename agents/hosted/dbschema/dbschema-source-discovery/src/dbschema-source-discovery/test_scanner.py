@@ -36,9 +36,24 @@ class ScanTests(unittest.TestCase):
     def test_ignores_regression_test_directories_and_projects(self):
         base = "https://github.com/source/catalog/tree/main/src"
         result = scan(base, archive({
+            "src/Database/AppDbContext.cs": "class AppDbContext : DbContext {}",
             "src/Database/Tables/Order.cs": "class Order { public int Id { get; set; } }",
             "src/Database/RegressionTests/OrderRegression.cs": "migrationBuilder.CreateTable(name: \"Ignored\");",
             "src/Database.RegressionTests/OrderRegression.cs": "migrationBuilder.CreateTable(name: \"Ignored\");",
+        }))
+
+        self.assertEqual(
+            [
+                "https://github.com/source/catalog/blob/main/src/Database/AppDbContext.cs",
+                "https://github.com/source/catalog/blob/main/src/Database/Tables/Order.cs",
+            ],
+            result["schemaFiles"],
+        )
+
+    def test_never_selects_files_outside_the_requested_tree(self):
+        result = scan(SOURCE, archive({
+            "src/Database/Tables/Order.cs": "[Table(\"Orders\")] class Order {}",
+            "src/Other/Migrations/CreateOutside.cs": "migrationBuilder.CreateTable(name: \"Outside\");",
         }))
 
         self.assertEqual(
@@ -46,13 +61,23 @@ class ScanTests(unittest.TestCase):
             result["schemaFiles"],
         )
 
-    def test_never_selects_files_outside_the_requested_tree(self):
-        result = scan(SOURCE, archive({
-            "src/Database/Tables/Order.cs": "class Order {}",
-            "src/Other/Migrations/CreateOutside.cs": "migrationBuilder.CreateTable(name: \"Outside\");",
+    def test_selects_nothing_when_no_file_shows_anything_is_persisted(self):
+        # An outer API's "Models" folders hold request/response DTOs, not tables.
+        result = scan("https://github.com/source/catalog/tree/main/src", archive({
+            "src/Api/Models/LearnerNotification.cs": "public class LearnerNotification { public long NotificationId { get; set; } }",
+            "src/Api/Models/Status.cs": "public enum Status { Active, Inactive }",
+        }))
+
+        self.assertEqual([], result["schemaFiles"])
+
+    def test_ignores_mock_and_stub_projects(self):
+        result = scan("https://github.com/source/catalog/tree/main/src", archive({
+            "src/Data/AppDbContext.cs": "class AppDbContext : DbContext {}",
+            "src/SFA.DAS.Portal.OuterApi.Mock/Models/Apprentice.cs": "class Apprentice { public string FirstName { get; set; } }",
+            "src/SFA.DAS.Portal.Stubs/Models/Calendar.cs": "class Calendar {}",
         }))
 
         self.assertEqual(
-            ["https://github.com/source/catalog/blob/main/src/Database/Tables/Order.cs"],
+            ["https://github.com/source/catalog/blob/main/src/Data/AppDbContext.cs"],
             result["schemaFiles"],
         )

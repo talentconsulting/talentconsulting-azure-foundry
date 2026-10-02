@@ -22,9 +22,14 @@ MAX_FILES = 100
 MAX_FILE_BYTES = 512 * 1024
 MAX_TOTAL_BYTES = 2 * 1024 * 1024
 SUPPORTED_EXTENSIONS = {".cs", ".go", ".java", ".js", ".jsx", ".kt", ".php", ".prisma", ".py", ".rb", ".sql", ".ts", ".tsx", ".xml", ".yaml", ".yml"}
-IGNORED_PARTS = {".git", ".github", ".idea", ".vs", ".vscode", "adhocscripts", "bin", "build", "dist", "node_modules", "obj", "packages", "test", "tests", "unittests", "integrationtests", "acceptancetests", "regressiontests", "regression", "testharness", "fakeservers"}
-IGNORED_SUFFIXES = (".tests", ".unittests", ".integrationtests", ".acceptancetests", ".regressiontests", ".testharness", ".fakeservers")
+IGNORED_PARTS = {".git", ".github", ".idea", ".vs", ".vscode", "adhocscripts", "bin", "build", "dist", "node_modules", "obj", "packages", "test", "tests", "unittests", "integrationtests", "acceptancetests", "regressiontests", "regression", "testharness", "fakeservers", "mock", "mocks", "stubs"}
+# Mock/stub projects (e.g. SFA.DAS.ApprenticePortal.OuterApi.Mock) hold fake API models, not tables.
+IGNORED_SUFFIXES = (".tests", ".unittests", ".integrationtests", ".acceptancetests", ".regressiontests", ".testharness", ".fakeservers", ".mock", ".mocks", ".mockapis", ".stubs", ".fakeapis")
 DATABASE_PATH_PARTS = {"data", "database", "db", "entities", "entity", "migrations", "models", "persistence", "prisma", "schema", "schemas", "tables"}
+# Stricter than DATABASE_MARKER_RE: evidence that something is actually persisted. A repository whose
+# selected files contain none of these (e.g. an outer API whose "models" folders hold DTOs) has no
+# database to describe, so discovery returns no files rather than letting the model guess.
+PERSISTENCE_RE = re.compile(r"\[Table\s*\(|\b(?:DbContext|DbSet\s*<|IEntityTypeConfiguration\s*<|EntityTypeBuilder\s*<|ToTable\s*\(|CreateTable\s*\(|CREATE\s+TABLE\b|ALTER\s+TABLE\b|declarative_base\s*\(|mapped_column\s*\(|@Entity\b|@Table\b|sequelize\.define\s*\(|gorm:\"|ActiveRecord::Migration|create_table\s+|Schema::create\s+|Doctrine\\ORM|databaseChangeLog|<createTable\b)", re.IGNORECASE)
 DATABASE_MARKER_RE = re.compile(r"\b(?:DbContext|DbSet\s*<|IEntityTypeConfiguration\s*<|EntityTypeBuilder\s*<|CreateTable\s*\(|CreateIndex\s*\(|CREATE\s+(?:TABLE|INDEX|TYPE)\b|ALTER\s+TABLE\b|FOREIGN\s+KEY\b|model\s+\w+\s*\{|enum\s+\w+\s*\{|declarative_base\s*\(|mapped_column\s*\(|relationship\s*\(|@Entity\b|@Table\b|sequelize\.define\s*\(|DataTypes\.|gorm:\"|ActiveRecord::Migration|create_table\s+|Schema::create\s+|Doctrine\\ORM|databaseChangeLog|<createTable\b|<entity\b)", re.IGNORECASE)
 
 
@@ -66,6 +71,10 @@ def _database_source(path: str, content: str) -> bool:
     return bool({part.lower() for part in path.split("/")[:-1]} & DATABASE_PATH_PARTS) or bool(DATABASE_MARKER_RE.search(content))
 
 
+def _persists(path: str, content: str) -> bool:
+    return path.lower().endswith(".prisma") or "/migrations/" in f"/{path.lower()}" or bool(PERSISTENCE_RE.search(content))
+
+
 def _priority(path: str, content: str) -> tuple[int, str]:
     lowered = path.lower()
     if "createtable(" in content.lower() or re.search(r"\bcreate\s+table\b", content, re.IGNORECASE) or "/migrations/" in f"/{lowered}":
@@ -101,6 +110,7 @@ def scan(source_url: str, archive_bytes: bytes | None = None) -> dict[str, objec
     selected: list[tuple[tuple[int, str], str, int]] = []
     excluded: list[dict[str, str]] = []
     total_uncompressed = 0
+    has_persistence = False
     try:
         with zipfile.ZipFile(io.BytesIO(archive_bytes if archive_bytes is not None else _download_archive(location))) as archive:
             for member in archive.infolist():
@@ -122,8 +132,11 @@ def scan(source_url: str, archive_bytes: bytes | None = None) -> dict[str, objec
                     continue
                 if _database_source(path, content):
                     selected.append((_priority(path, content), path, member.file_size))
+                    has_persistence = has_persistence or _persists(path, content)
     except zipfile.BadZipFile as error:
         raise ScanError("GitHub returned an invalid source archive.") from error
+    if not has_persistence:
+        return {"schemaFiles": [], "excludedFiles": sorted(excluded, key=lambda item: item["path"])}
     selected.sort()
     files: list[str] = []
     total_bytes = 0

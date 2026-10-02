@@ -54,6 +54,29 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(["discovery", "generator"], [call[0] for call in calls])
         self.assertEqual({"sourceUrl": SOURCE, "schema": SCHEMA}, result["schemas"][0])
 
+    def test_no_discovered_files_yields_an_empty_schema_without_calling_the_generator(self):
+        calls = []
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            calls.append(name)
+            return {"schemaFiles": [], "excludedFiles": []}
+
+        result = run_workflow(
+            object(),
+            {"sourceUrl": SOURCE, "deferPublication": True},
+            "discovery", "generator",
+            "publisher",
+            "gpt-4o",
+            invoker=invoke,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(["discovery"], calls)
+        self.assertEqual(
+            {"database": {"name": None, "engine": None}, "tables": [], "types": []},
+            result["schemas"][0]["schema"],
+        )
+
     def test_direct_workflow_generates_and_publishes_once(self):
         calls = []
 

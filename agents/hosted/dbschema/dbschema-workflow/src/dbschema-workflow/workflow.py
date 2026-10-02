@@ -131,8 +131,9 @@ def validate_discovery_output(value: Any, source_url: str, max_files: int) -> di
         raise WorkflowError("invalid_discovery_output", "Discovery must contain exactly schemaFiles and excludedFiles.")
     files = value["schemaFiles"]
     excluded = value["excludedFiles"]
-    if not isinstance(files, list) or not files or len(files) > max_files:
-        raise WorkflowError("invalid_discovery_output", f"schemaFiles must contain between 1 and {max_files} files.")
+    # An empty list is valid: discovery found no evidence that the source persists anything.
+    if not isinstance(files, list) or len(files) > max_files:
+        raise WorkflowError("invalid_discovery_output", f"schemaFiles must contain at most {max_files} files.")
     source = parse_source_url(source_url)
     validated = [_validate_blob_url(item, source) for item in files]
     if len(validated) != len(set(validated)):
@@ -241,6 +242,10 @@ def _publisher_payload(request: dict[str, Any], schema: dict[str, Any]) -> dict[
     return payload
 
 
+class _NoDatabase(Exception):
+    pass
+
+
 def run_workflow(
     project: Any,
     request: dict[str, Any],
@@ -261,6 +266,8 @@ def run_workflow(
         discovery = invoker(project, discovery_name, model, {"sourceUrl": source_url})
         discovered = validate_discovery_output(discovery, source_url, max_files)
         schema_files = discovered["schemaFiles"]
+        if not schema_files:
+            raise _NoDatabase()
         batches = [
             schema_files[index : index + generator_batch_size]
             for index in range(0, len(schema_files), generator_batch_size)
@@ -297,6 +304,9 @@ def run_workflow(
             raise WorkflowError("generation_failed", "No batch of source files produced a valid schema.")
         schema, merge_warnings = merge_schemas(batch_schemas)
         batch_errors.extend(merge_warnings)
+    except _NoDatabase:
+        # Nothing persisted, so the database is empty rather than something for the model to invent.
+        schema = {"database": {"name": None, "engine": None}, "tables": [], "types": []}
     except Exception as error:
         return {
             "success": False,
