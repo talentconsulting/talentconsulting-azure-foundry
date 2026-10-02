@@ -1,4 +1,5 @@
 import json
+import threading
 import unittest
 import urllib.error
 from io import BytesIO
@@ -29,6 +30,15 @@ CATALOG = {
         "container": {"format": "drawio", "filename": "container.drawio", "drawioXml": DRAWIO},
     },
 }
+
+
+def repositories(*names):
+    return [dict(manifest()[0], **{"github-repo": f"https://github.com/source/{name}"}) for name in names]
+
+
+def workflow_result(source_url):
+    repository = source_url.split("/")[4]
+    return {"success": True, "catalogs": [{"sourceUrl": source_url, "catalog": dict(CATALOG, repository=f"source/{repository}")}]}
 
 
 def manifest(last_commit=OLD_SHA):
@@ -124,6 +134,50 @@ class ManifestTests(unittest.TestCase):
         )
         self.assertTrue(result["success"])
         self.assertEqual(["workflow", "publisher"], [call[0] for call in calls])
+
+    def test_repositories_are_generated_concurrently(self):
+        # Fails with BrokenBarrierError unless all three workflows are in flight at once.
+        barrier = threading.Barrier(3, timeout=5)
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "workflow":
+                barrier.wait()
+                return workflow_result(payload["sourceUrl"])
+            return {"success": True, "status": "created"}
+
+        result = run_manifest(
+            object(), {"sourceUrl": MANIFEST_URL}, "workflow", "publisher", "gpt-4o",
+            workflow_concurrency=3,
+            manifest_loader=lambda blob: repositories("app", "app2", "app3"),
+            commit_resolver=lambda entry: NEW_SHA, invoker=invoke,
+        )
+        self.assertTrue(result["success"])
+        self.assertEqual(3, result["generatedCatalogCount"])
+
+    def test_results_are_published_in_manifest_order_not_completion_order(self):
+        first_may_finish = threading.Event()
+        published = []
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "workflow":
+                if payload["sourceUrl"].startswith("https://github.com/source/app/"):
+                    # The first repository finishes last, but must still be published first.
+                    first_may_finish.wait(timeout=5)
+                else:
+                    first_may_finish.set()
+                return workflow_result(payload["sourceUrl"])
+            published.append(payload)
+            return {"success": True, "status": "created"}
+
+        result = run_manifest(
+            object(), {"sourceUrl": MANIFEST_URL}, "workflow", "publisher", "gpt-4o",
+            workflow_concurrency=2,
+            manifest_loader=lambda blob: repositories("app", "app2"),
+            commit_resolver=lambda entry: NEW_SHA, invoker=invoke,
+        )
+        self.assertTrue(result["success"])
+        self.assertEqual(["app/c4", "app2/c4"], [item["targetDirectory"] for item in published[0]["catalogs"]])
+        self.assertEqual(["source/app", "source/app2"], [item["repository"] for item in result["generatedRepositories"]])
 
     def test_generation_failure_does_not_update_or_publish(self):
         def invoke(project, name, model, payload, max_attempts=2):

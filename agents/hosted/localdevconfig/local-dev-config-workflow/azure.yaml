@@ -35,6 +35,8 @@ services:
         value: ${LOCAL_DEV_CONFIG_DISCOVERY_MAX_FILES}
       - name: LOCAL_DEV_CONFIG_GENERATOR_BATCH_SIZE
         value: ${LOCAL_DEV_CONFIG_GENERATOR_BATCH_SIZE}
+      - name: LOCAL_DEV_CONFIG_GENERATOR_CONCURRENCY
+        value: ${LOCAL_DEV_CONFIG_GENERATOR_CONCURRENCY}
     kind: hosted
     name: local-dev-config-workflow
     displayName: Local Dev Config Workflow

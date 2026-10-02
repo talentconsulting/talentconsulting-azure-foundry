@@ -30,6 +30,8 @@ services:
         value: ${REPO_METADATA_MANIFEST_MAX_ENTRIES}
       - name: REPO_METADATA_MANIFEST_MAX_CATALOGS
         value: ${REPO_METADATA_MANIFEST_MAX_CATALOGS}
+      - name: REPO_METADATA_MANIFEST_WORKFLOW_CONCURRENCY
+        value: ${REPO_METADATA_MANIFEST_WORKFLOW_CONCURRENCY}
       - name: GITHUB_READ_TOKEN
         value: ${{connections.openapi-pr-github.credentials.github_token}}
     kind: hosted

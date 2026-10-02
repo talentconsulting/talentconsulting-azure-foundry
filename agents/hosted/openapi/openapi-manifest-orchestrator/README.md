@@ -32,7 +32,7 @@ The manifest must use this schema:
 
 ## Behavior
 
-For every changed manifest entry, the agent calls `openapi-spec-workflow` with deferred publication. Complete results are combined and sent once to `openapi-spec-pr-creator`:
+For every changed manifest entry, the agent calls `openapi-spec-workflow` with deferred publication. Up to `OPENAPI_MANIFEST_WORKFLOW_CONCURRENCY` repositories (default 4) are discovered and generated at once; results are still processed in manifest order, so the PR content and manifest hashes do not depend on which repository finishes first. Complete results are combined and sent once to `openapi-spec-pr-creator`:
 
 - Destination repository: the repository containing the manifest.
 - Base branch: the ref in the manifest blob URL.

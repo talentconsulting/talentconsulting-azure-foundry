@@ -23,6 +23,7 @@ DISCOVERY_NAME = os.getenv("EVENTCATALOG_DISCOVERY_AGENT_NAME", "eventcatalog-so
 PUBLISHER_NAME = os.getenv("EVENTCATALOG_PR_CREATOR_AGENT_NAME", "eventcatalog-pr-creator")
 MAX_FILES = int(os.getenv("EVENTCATALOG_DISCOVERY_MAX_FILES", "100"))
 GENERATOR_BATCH_SIZE = int(os.getenv("EVENTCATALOG_GENERATOR_BATCH_SIZE", "10"))
+GENERATOR_CONCURRENCY = int(os.getenv("EVENTCATALOG_GENERATOR_CONCURRENCY", "3"))
 if not PROJECT_ENDPOINT:
     raise EnvironmentError("FOUNDRY_PROJECT_ENDPOINT is required.")
 
@@ -69,6 +70,7 @@ async def handle_create(request: CreateResponse, context: ResponseContext, cance
             MODEL,
             MAX_FILES,
             GENERATOR_BATCH_SIZE,
+            GENERATOR_CONCURRENCY,
         )
     except Exception as error:
         logger.exception("Event-and-command-catalog workflow failed.")

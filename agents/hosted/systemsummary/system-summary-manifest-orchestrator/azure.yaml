@@ -28,6 +28,8 @@ services:
         value: ${SYSTEM_SUMMARY_PR_CREATOR_AGENT_NAME}
       - name: SYSTEM_SUMMARY_MANIFEST_MAX_ENTRIES
         value: ${SYSTEM_SUMMARY_MANIFEST_MAX_ENTRIES}
+      - name: SYSTEM_SUMMARY_MANIFEST_WORKFLOW_CONCURRENCY
+        value: ${SYSTEM_SUMMARY_MANIFEST_WORKFLOW_CONCURRENCY}
     kind: hosted
     name: system-summary-manifest-orchestrator
     displayName: System Summary Manifest Orchestrator

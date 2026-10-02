@@ -9,6 +9,7 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -304,6 +305,7 @@ def run_manifest(
     model: str,
     max_entries: int = 25,
     max_catalogs: int = 100,
+    workflow_concurrency: int = 4,
     manifest_loader: Callable[[GitHubBlob], object] = download_manifest,
     commit_resolver: Callable[[ManifestEntry], str] = latest_commit,
     invoker: Callable[..., Any] = invoke_agent,
@@ -345,9 +347,17 @@ def run_manifest(
         }
     combined_catalogs: list[dict[str, Any]] = []
     generated_repositories: list[dict[str, Any]] = []
-    for entry, commit in changed:
+    with ThreadPoolExecutor(max_workers=max(1, workflow_concurrency)) as executor:
+        futures = [
+            executor.submit(
+                invoker, project, workflow_name, model, {"sourceUrl": entry.source_url, "deferPublication": True}
+            )
+            for entry, _commit in changed
+        ]
+    # Process results in manifest order so the catalog cap, hash updates, and PR content stay deterministic.
+    for (entry, commit), future in zip(changed, futures):
         try:
-            workflow_result = invoker(project, workflow_name, model, {"sourceUrl": entry.source_url, "deferPublication": True})
+            workflow_result = future.result()
             catalogs = _validate_workflow_output(workflow_result, entry)
             if len(combined_catalogs) + len(catalogs) > max_catalogs:
                 raise ManifestError("too_many_catalogs", f"A run may publish at most {max_catalogs} repo-metadata catalogs.")

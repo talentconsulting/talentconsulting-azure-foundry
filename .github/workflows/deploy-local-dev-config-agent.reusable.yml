@@ -95,8 +95,10 @@ jobs:
           azd env set LOCAL_DEV_CONFIG_WORKFLOW_AGENT_NAME local-dev-config-workflow
           azd env set LOCAL_DEV_CONFIG_DISCOVERY_MAX_FILES 100
           azd env set LOCAL_DEV_CONFIG_GENERATOR_BATCH_SIZE 5
+          azd env set LOCAL_DEV_CONFIG_GENERATOR_CONCURRENCY 3
           azd env set LOCAL_DEV_CONFIG_MANIFEST_MAX_ENTRIES 100
           azd env set LOCAL_DEV_CONFIG_MANIFEST_MAX_CATALOGS 100
+          azd env set LOCAL_DEV_CONFIG_MANIFEST_WORKFLOW_CONCURRENCY 4
 
       - name: Run unit tests
         working-directory: ${{ inputs.project_dir }}

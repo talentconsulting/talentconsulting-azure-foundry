@@ -1,3 +1,4 @@
+import threading
 import unittest
 
 from workflow import WorkflowError, merge_catalogs, parse_workflow_request, run_workflow, validate_discovery_output
@@ -91,7 +92,7 @@ class WorkflowTests(unittest.TestCase):
         result = run_workflow(
             object(), {"sourceUrl": SOURCE, "deferPublication": True},
             "discovery", "generator", "publisher", "gpt-4o",
-            generator_batch_size=1, invoker=invoke,
+            generator_batch_size=1, invoker=invoke, retry_delay_seconds=0,
         )
         self.assertFalse(result["success"])
         self.assertEqual("partial_generation_failed", result["errors"][0]["code"])
@@ -231,6 +232,52 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(1, len(result["catalogs"][0]["catalog"]["commands"]))
         self.assertEqual(1, len(result["generationErrors"]))
         self.assertEqual("ConflictingField", result["generationErrors"][0]["errorType"])
+
+    def test_batches_are_generated_concurrently(self):
+        # Fails with BrokenBarrierError unless all three batches are in flight at once.
+        barrier = threading.Barrier(3, timeout=5)
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "discovery":
+                return {"sourceFiles": FILES, "excludedFiles": []}
+            barrier.wait()
+            index = FILES.index(payload["sourceFiles"][0])
+            return catalog(commands=[message(f"Command{index}")])
+
+        result = run_workflow(
+            object(), {"sourceUrl": SOURCE, "deferPublication": True},
+            "discovery", "generator", "publisher", "gpt-4o",
+            generator_batch_size=1, generator_concurrency=3, invoker=invoke,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(3, len(result["catalogs"][0]["catalog"]["commands"]))
+
+    def test_merge_follows_batch_order_not_completion_order(self):
+        first = message("ImportAccountPaymentMetadataCommand")
+        first["fields"] = [{"name": "PeriodEndRef", "type": "string", "required": True, "description": None}]
+        second = message("ImportAccountPaymentMetadataCommand")
+        second["fields"] = [{"name": "PeriodEndRef", "type": "int", "required": False, "description": None}]
+        second_done = threading.Event()
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "discovery":
+                return {"sourceFiles": FILES[:2], "excludedFiles": []}
+            if payload["sourceFiles"] == FILES[0:1]:
+                # The first batch finishes last, but its conflicting field must still win.
+                second_done.wait(timeout=5)
+                return catalog(commands=[first])
+            second_done.set()
+            return catalog(commands=[second])
+
+        result = run_workflow(
+            object(), {"sourceUrl": SOURCE, "deferPublication": True},
+            "discovery", "generator", "publisher", "gpt-4o",
+            generator_batch_size=1, generator_concurrency=2, invoker=invoke,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual("string", result["catalogs"][0]["catalog"]["commands"][0]["fields"][0]["type"])
 
 
 if __name__ == "__main__":

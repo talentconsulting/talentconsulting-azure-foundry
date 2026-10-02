@@ -9,6 +9,7 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -385,6 +386,7 @@ def run_manifest(
     max_entries: int = 25,
     max_specs: int = 100,
     batch_size: int = 30,
+    workflow_concurrency: int = 4,
     manifest_loader: Callable[[GitHubBlob], object] = download_manifest,
     commit_resolver: Callable[[ManifestEntry], str] = latest_commit,
     invoker: Callable[..., Any] = invoke_agent,
@@ -431,35 +433,43 @@ def run_manifest(
             "pullRequest": None,
         }
 
+    def generate(
+        entry: ManifestEntry, commit: str
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int, int]:
+        discovered = _validate_discovered_files(
+            invoker(project, discovery_name, model, {"sourceUrl": entry.source_url}),
+            entry,
+        )
+        total = len(discovered)
+        # A repository too large to generate in one call resumes from where the last run left
+        # off (tracked in the manifest as in-progress), but only if that progress was recorded
+        # against this SAME commit -- a new upstream commit always restarts the batch from zero
+        # rather than mixing specs generated from two different commits.
+        offset = entry.completed_files if entry.in_progress_commit == commit else 0
+        batch = discovered[offset : offset + batch_size]
+        specifications: list[dict[str, Any]] = []
+        warnings: list[dict[str, Any]] = []
+        if batch:
+            workflow_result = invoker(
+                project,
+                workflow_name,
+                model,
+                {"sourceUrl": entry.source_url, "deferPublication": True, "apiFiles": batch},
+            )
+            specifications, warnings = _validate_deferred_output(workflow_result, entry)
+        return specifications, warnings, min(offset + len(batch), total), total
+
     combined_specs: list[dict[str, Any]] = []
     generated_repositories: list[dict[str, Any]] = []
-    for entry, commit in changed:
+    with ThreadPoolExecutor(max_workers=max(1, workflow_concurrency)) as executor:
+        futures = [executor.submit(generate, entry, commit) for entry, commit in changed]
+    # Process results in manifest order so the spec cap, hash updates, and PR content stay deterministic.
+    for (entry, commit), future in zip(changed, futures):
         try:
-            discovered = _validate_discovered_files(
-                invoker(project, discovery_name, model, {"sourceUrl": entry.source_url}),
-                entry,
-            )
-            total = len(discovered)
-            # A repository too large to generate in one call resumes from where the last run left
-            # off (tracked in the manifest as in-progress), but only if that progress was recorded
-            # against this SAME commit -- a new upstream commit always restarts the batch from zero
-            # rather than mixing specs generated from two different commits.
-            offset = entry.completed_files if entry.in_progress_commit == commit else 0
-            batch = discovered[offset : offset + batch_size]
-            specifications: list[dict[str, Any]] = []
-            warnings: list[dict[str, Any]] = []
-            if batch:
-                workflow_result = invoker(
-                    project,
-                    workflow_name,
-                    model,
-                    {"sourceUrl": entry.source_url, "deferPublication": True, "apiFiles": batch},
-                )
-                specifications, warnings = _validate_deferred_output(workflow_result, entry)
+            specifications, warnings, completed, total = future.result()
             if len(combined_specs) + len(specifications) > max_specs:
                 raise ManifestError("too_many_specifications", f"A run may publish at most {max_specs} specs.")
             combined_specs.extend(specifications)
-            completed = min(offset + len(batch), total)
             if completed >= total:
                 updated_manifest[entry.index]["specs"]["last-commit-hash-scanned"] = commit
                 updated_manifest[entry.index]["specs"].pop("in-progress", None)

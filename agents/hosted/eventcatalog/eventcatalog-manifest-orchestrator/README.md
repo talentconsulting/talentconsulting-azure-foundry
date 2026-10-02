@@ -1,6 +1,6 @@
 # Event and Command Catalog Manifest Orchestrator
 
-Reads a public GitHub JSON manifest, compares each configured branch head with `last-commit-hash-scanned`, invokes `eventcatalog-workflow` only for changed repositories, and creates one combined catalogs-and-manifest pull request. Successful entries advance their commit hash; failed entries remain retryable. No schedule is created.
+Reads a public GitHub JSON manifest, compares each configured branch head with `last-commit-hash-scanned`, invokes `eventcatalog-workflow` only for changed repositories (up to `EVENTCATALOG_MANIFEST_WORKFLOW_CONCURRENCY` at once, default 4, with results still processed in manifest order so the PR content and manifest hashes do not depend on which repository finishes first), and creates one combined catalogs-and-manifest pull request. Successful entries advance their commit hash; failed entries remain retryable. No schedule is created.
 
 ```json
 [

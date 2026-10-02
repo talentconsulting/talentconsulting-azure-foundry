@@ -1,4 +1,5 @@
 import json
+import threading
 import unittest
 
 from orchestrator import (
@@ -159,6 +160,60 @@ class RunManifestTests(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertEqual(0, result["generatedSystemCount"])
         self.assertEqual([], result["systems"])
+
+    def test_repositories_are_summarized_concurrently(self):
+        entries = [{"github-repo": f"https://github.com/source/app{index}"} for index in range(3)]
+        fetch = fetch_fixture({"https://raw.githubusercontent.com/org/catalogue/main/manifest.json": entries})
+        # Fails with BrokenBarrierError unless all three generator calls are in flight at once.
+        barrier = threading.Barrier(3, timeout=5)
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            barrier.wait()
+            return dict(SUMMARY, repository=payload["repository"])
+
+        result = run_manifest(
+            object(), {"sourceUrl": MANIFEST_URL, "deferPublication": True},
+            "generator", "publisher", "gpt-4o", workflow_concurrency=3, fetch=fetch, invoker=invoke,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(3, result["generatedSystemCount"])
+
+    def test_results_are_processed_in_manifest_order_when_completion_order_differs(self):
+        entries = [
+            {"github-repo": "https://github.com/source/first"},
+            "not an object",
+            {"github-repo": "https://github.com/source/broken"},
+            {"github-repo": "https://github.com/source/last"},
+        ]
+        fetch = fetch_fixture({"https://raw.githubusercontent.com/org/catalogue/main/manifest.json": entries})
+        last_done = threading.Event()
+        published = []
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "publisher":
+                published.append(payload)
+                return {"success": True, "status": "created"}
+            # The first repository only finishes after the last one, so completion order is reversed.
+            if payload["repository"] == "source/first":
+                self.assertTrue(last_done.wait(timeout=5))
+            if payload["repository"] == "source/broken":
+                raise RuntimeError("generator unavailable")
+            if payload["repository"] == "source/last":
+                last_done.set()
+            return dict(SUMMARY, repository=payload["repository"])
+
+        result = run_manifest(
+            object(), {"sourceUrl": MANIFEST_URL, "deferPublication": True},
+            "generator", "publisher", "gpt-4o", workflow_concurrency=4, fetch=fetch, invoker=invoke,
+        )
+
+        self.assertEqual(["source/first", "source/last"], [system["repository"] for system in result["systems"]])
+        self.assertEqual(
+            [("entry[1]", "manifest_entry"), ("source/broken", "system_summary")],
+            [(failure["repository"], failure["stage"]) for failure in result["failures"]],
+        )
+        self.assertEqual([], published)
 
 
 if __name__ == "__main__":

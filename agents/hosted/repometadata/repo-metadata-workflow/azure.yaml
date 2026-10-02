@@ -35,6 +35,8 @@ services:
         value: ${REPO_METADATA_DISCOVERY_MAX_FILES}
       - name: REPO_METADATA_GENERATOR_BATCH_SIZE
         value: ${REPO_METADATA_GENERATOR_BATCH_SIZE}
+      - name: REPO_METADATA_GENERATOR_CONCURRENCY
+        value: ${REPO_METADATA_GENERATOR_CONCURRENCY}
     kind: hosted
     name: repo-metadata-workflow
     displayName: .NET Version Workflow

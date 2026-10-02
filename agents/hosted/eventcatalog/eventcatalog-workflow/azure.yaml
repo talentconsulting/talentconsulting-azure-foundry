@@ -35,6 +35,8 @@ services:
         value: ${EVENTCATALOG_DISCOVERY_MAX_FILES}
       - name: EVENTCATALOG_GENERATOR_BATCH_SIZE
         value: ${EVENTCATALOG_GENERATOR_BATCH_SIZE}
+      - name: EVENTCATALOG_GENERATOR_CONCURRENCY
+        value: ${EVENTCATALOG_GENERATOR_CONCURRENCY}
     kind: hosted
     name: eventcatalog-workflow
     displayName: Event and Command Catalog Workflow

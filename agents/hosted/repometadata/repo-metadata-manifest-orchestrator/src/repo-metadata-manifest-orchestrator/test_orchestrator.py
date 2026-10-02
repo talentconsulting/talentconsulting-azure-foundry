@@ -1,4 +1,5 @@
 import json
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -284,6 +285,71 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(0, result["skippedCount"])
         self.assertEqual([], result["skippedRepositories"])
         self.assertEqual(2, result["checkedCount"])
+
+    def test_repositories_are_generated_concurrently(self):
+        repos = [repo_metadata_entry(index) for index in range(3)]
+        # Fails with BrokenBarrierError unless all three workflows are in flight at once.
+        barrier = threading.Barrier(3, timeout=5)
+        published = []
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "workflow":
+                barrier.wait()
+                repository = payload["sourceUrl"].split("/")[4]
+                catalog = make_catalog(repository=f"source/{repository}")
+                return {"success": True, "catalogs": [{"sourceUrl": payload["sourceUrl"], "catalog": catalog}]}
+            published.append(payload)
+            return {"success": True, "status": "created"}
+
+        result = run_manifest(
+            object(), {"sourceUrl": MANIFEST_URL}, "workflow", "publisher", "gpt-4o",
+            workflow_concurrency=3,
+            manifest_loader=lambda blob: repos, commit_resolver=lambda entry: NEW_SHA, invoker=invoke,
+        )
+        self.assertTrue(result["success"])
+        self.assertEqual(3, result["generatedCatalogCount"])
+        self.assertEqual(1, len(published))
+
+    def test_results_are_processed_in_manifest_order_not_completion_order(self):
+        repos = [repo_metadata_entry(index) for index in range(3)]
+        later_done = threading.Event()
+        finished = []
+        published = []
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "workflow":
+                repository = payload["sourceUrl"].split("/")[4]
+                if repository == "app0":
+                    # The first repository finishes last, but must still come first in the PR.
+                    later_done.wait(timeout=5)
+                else:
+                    finished.append(repository)
+                    if len(finished) == 2:
+                        later_done.set()
+                catalog = make_catalog(repository=f"source/{repository}")
+                return {"success": True, "catalogs": [{"sourceUrl": payload["sourceUrl"], "catalog": catalog}]}
+            published.append(payload)
+            return {"success": True, "status": "created"}
+
+        result = run_manifest(
+            object(), {"sourceUrl": MANIFEST_URL}, "workflow", "publisher", "gpt-4o",
+            workflow_concurrency=3,
+            manifest_loader=lambda blob: repos, commit_resolver=lambda entry: NEW_SHA, invoker=invoke,
+        )
+        self.assertTrue(result["success"])
+        self.assertTrue(later_done.is_set())
+        self.assertEqual(
+            ["app0/repo-metadata/repo-metadata.json", "app1/repo-metadata/repo-metadata.json", "app2/repo-metadata/repo-metadata.json"],
+            [catalog["targetPath"] for catalog in published[0]["catalogs"]],
+        )
+        self.assertEqual(
+            ["source/app0", "source/app1", "source/app2"],
+            [repository["repository"] for repository in result["generatedRepositories"]],
+        )
+        self.assertEqual(
+            [NEW_SHA] * 3,
+            [entry[MANIFEST_NODE]["last-commit-hash-scanned"] for entry in published[0]["manifestFile"]["content"]],
+        )
 
     def test_malformed_entry_beyond_the_cap_still_raises_during_validation(self):
         oversized = [repo_metadata_entry(i) for i in range(31)]

@@ -1,4 +1,5 @@
 import json
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -52,7 +53,7 @@ class RunWorkflowTests(unittest.TestCase):
                 return discovery
             self.assertEqual("generator", name)
             generator_calls.append(payload["sourceFiles"])
-            index = len(generator_calls)
+            index = files.index(payload["sourceFiles"][0])
             return _catalog(f"src/App{index}/App{index}.csproj", ["net8.0"])
 
         result = run_workflow(
@@ -67,9 +68,9 @@ class RunWorkflowTests(unittest.TestCase):
         )
 
         self.assertTrue(result["success"])
-        self.assertEqual([files[0:5], files[5:7]], generator_calls)
+        self.assertCountEqual([files[0:5], files[5:7]], generator_calls)
         paths = sorted(project["path"] for project in result["catalogs"][0]["catalog"]["projects"])
-        self.assertEqual(["src/App1/App1.csproj", "src/App2/App2.csproj"], paths)
+        self.assertEqual(["src/App0/App0.csproj", "src/App5/App5.csproj"], paths)
         self.assertEqual(LAST_COMMIT_DATE, result["catalogs"][0]["catalog"]["lastCommitDate"])
 
     def test_run_workflow_merge_dedupes_by_path_first_wins_with_warning(self):
@@ -84,7 +85,7 @@ class RunWorkflowTests(unittest.TestCase):
             if name == "discovery":
                 return discovery
             calls.append(payload["sourceFiles"])
-            frameworks = ["net8.0"] if len(calls) == 1 else ["net9.0"]
+            frameworks = ["net8.0"] if payload["sourceFiles"] == [files[0]] else ["net9.0"]
             return _catalog("src/App0/App0.csproj", frameworks)
 
         result = run_workflow(
@@ -236,12 +237,100 @@ class RunWorkflowTests(unittest.TestCase):
             "gpt-4o",
             generator_batch_size=1,
             invoker=invoke,
+            retry_delay_seconds=0,
         )
 
         self.assertFalse(result["success"])
         self.assertEqual(0, result["generatedCatalogCount"])
         self.assertEqual("generation_failed", result["errors"][0]["code"])
         self.assertEqual(2, len(result["generationErrors"]))
+
+    def test_batches_are_generated_concurrently(self):
+        files = [_file(index) for index in range(9)]
+        discovery = {"repoMetadataFiles": files, "excludedFiles": []}
+        # Fails with BrokenBarrierError unless all three batches are in flight at once.
+        barrier = threading.Barrier(3, timeout=5)
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "discovery":
+                return discovery
+            barrier.wait()
+            index = files.index(payload["sourceFiles"][0])
+            return _catalog(f"src/App{index}/App{index}.csproj", ["net8.0"])
+
+        result = run_workflow(
+            object(),
+            {"sourceUrl": SOURCE, "deferPublication": True},
+            "discovery",
+            "generator",
+            "pr_creator",
+            "gpt-4o",
+            generator_batch_size=3,
+            generator_concurrency=3,
+            invoker=invoke,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(3, len(result["catalogs"][0]["catalog"]["projects"]))
+
+    def test_merge_follows_batch_order_not_completion_order(self):
+        files = [_file(index) for index in range(6)]
+        discovery = {"repoMetadataFiles": files, "excludedFiles": []}
+        second_done = threading.Event()
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "discovery":
+                return discovery
+            if payload["sourceFiles"] == files[0:3]:
+                # The first batch finishes last, but its targetFrameworks must still win.
+                second_done.wait(timeout=5)
+                return _catalog("src/App0/App0.csproj", ["net8.0"])
+            second_done.set()
+            return _catalog("src/App0/App0.csproj", ["net9.0"])
+
+        result = run_workflow(
+            object(),
+            {"sourceUrl": SOURCE, "deferPublication": True},
+            "discovery",
+            "generator",
+            "pr_creator",
+            "gpt-4o",
+            generator_batch_size=3,
+            generator_concurrency=2,
+            invoker=invoke,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(["net8.0"], result["catalogs"][0]["catalog"]["projects"][0]["targetFrameworks"])
+        self.assertEqual("DuplicateProject", result["generationErrors"][0]["errorType"])
+
+    def test_failed_batch_is_retried_with_exponential_backoff(self):
+        discovery = {"repoMetadataFiles": [_file(0)], "excludedFiles": []}
+        attempts = []
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "discovery":
+                return discovery
+            attempts.append(name)
+            if len(attempts) < 3:
+                raise RuntimeError("throttled")
+            return _catalog("src/App0/App0.csproj", ["net8.0"])
+
+        with patch("workflow.time.sleep") as sleep:
+            result = run_workflow(
+                object(),
+                {"sourceUrl": SOURCE, "deferPublication": True},
+                "discovery",
+                "generator",
+                "pr_creator",
+                "gpt-4o",
+                invoker=invoke,
+                retry_delay_seconds=2,
+            )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(3, len(attempts))
+        self.assertEqual([(2,), (4,)], [call.args for call in sleep.call_args_list])
 
 
 class MergeCatalogsTests(unittest.TestCase):

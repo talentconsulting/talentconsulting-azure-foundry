@@ -29,6 +29,7 @@ PUBLISHER_NAME = os.getenv("SPEC_PR_CREATOR_AGENT_NAME", "openapi-spec-pr-creato
 MAX_ENTRIES = int(os.getenv("OPENAPI_MANIFEST_MAX_ENTRIES", "100"))
 MAX_SPECS = int(os.getenv("OPENAPI_MANIFEST_MAX_SPECS", "100"))
 BATCH_SIZE = int(os.getenv("OPENAPI_MANIFEST_BATCH_SIZE", "30"))
+WORKFLOW_CONCURRENCY = int(os.getenv("OPENAPI_MANIFEST_WORKFLOW_CONCURRENCY", "4"))
 if not PROJECT_ENDPOINT:
     raise EnvironmentError("FOUNDRY_PROJECT_ENDPOINT is required.")
 
@@ -81,6 +82,7 @@ async def handle_create(
             MAX_ENTRIES,
             MAX_SPECS,
             BATCH_SIZE,
+            WORKFLOW_CONCURRENCY,
         )
     except Exception as error:
         logger.exception("Manifest-driven OpenAPI orchestration failed.")

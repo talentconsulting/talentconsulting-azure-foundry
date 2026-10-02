@@ -27,6 +27,7 @@ WORKFLOW_NAME = os.getenv("EVENTCATALOG_WORKFLOW_AGENT_NAME", "eventcatalog-work
 PUBLISHER_NAME = os.getenv("EVENTCATALOG_PR_CREATOR_AGENT_NAME", "eventcatalog-pr-creator")
 MAX_ENTRIES = int(os.getenv("EVENTCATALOG_MANIFEST_MAX_ENTRIES", "100"))
 MAX_CATALOGS = int(os.getenv("EVENTCATALOG_MANIFEST_MAX_CATALOGS", "100"))
+WORKFLOW_CONCURRENCY = int(os.getenv("EVENTCATALOG_MANIFEST_WORKFLOW_CONCURRENCY", "4"))
 if not PROJECT_ENDPOINT:
     raise EnvironmentError("FOUNDRY_PROJECT_ENDPOINT is required.")
 
@@ -77,6 +78,7 @@ async def handle_create(
             MODEL,
             MAX_ENTRIES,
             MAX_CATALOGS,
+            WORKFLOW_CONCURRENCY,
         )
     except Exception as error:
         logger.exception("Manifest-driven event-and-command-catalog orchestration failed.")

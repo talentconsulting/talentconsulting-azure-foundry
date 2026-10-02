@@ -37,6 +37,8 @@ services:
         value: ${OPENAPI_MANIFEST_MAX_SPECS}
       - name: OPENAPI_MANIFEST_BATCH_SIZE
         value: ${OPENAPI_MANIFEST_BATCH_SIZE}
+      - name: OPENAPI_MANIFEST_WORKFLOW_CONCURRENCY
+        value: ${OPENAPI_MANIFEST_WORKFLOW_CONCURRENCY}
       - name: GITHUB_READ_TOKEN
         value: ${{connections.openapi-pr-github.credentials.github_token}}
     kind: hosted

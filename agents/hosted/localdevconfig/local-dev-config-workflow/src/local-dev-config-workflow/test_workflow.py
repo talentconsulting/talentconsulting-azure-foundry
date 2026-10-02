@@ -1,4 +1,5 @@
 import json
+import threading
 import unittest
 
 from workflow import WorkflowError, merge_catalogs, parse_workflow_request, run_workflow
@@ -58,7 +59,7 @@ class RunWorkflowTests(unittest.TestCase):
                 return discovery
             self.assertEqual("generator", name)
             generator_calls.append(payload["sourceFiles"])
-            index = len(generator_calls)
+            index = 1 if payload["sourceFiles"] == files[0:5] else 2
             return _catalog(f"service-{index}", "database", "postgres")
 
         result = run_workflow(
@@ -73,7 +74,7 @@ class RunWorkflowTests(unittest.TestCase):
         )
 
         self.assertTrue(result["success"])
-        self.assertEqual([files[0:5], files[5:7]], generator_calls)
+        self.assertCountEqual([files[0:5], files[5:7]], generator_calls)
         names = sorted(service["name"] for service in result["catalogs"][0]["catalog"]["localServices"])
         self.assertEqual(["service-1", "service-2"], names)
 
@@ -86,7 +87,7 @@ class RunWorkflowTests(unittest.TestCase):
             if name == "discovery":
                 return discovery
             calls.append(payload["sourceFiles"])
-            technology = "redis6" if len(calls) == 1 else "redis7"
+            technology = "redis6" if payload["sourceFiles"] == [files[0]] else "redis7"
             return _catalog("Redis", "cache", technology)
 
         result = run_workflow(
@@ -106,6 +107,63 @@ class RunWorkflowTests(unittest.TestCase):
         self.assertEqual("redis6", services[0]["technology"])
         self.assertEqual(1, len(result["generationErrors"]))
         self.assertEqual("DuplicateLocalService", result["generationErrors"][0]["errorType"])
+
+    def test_batches_are_generated_concurrently(self):
+        files = [_file(index) for index in range(9)]
+        discovery = {"localDevConfigFiles": files, "excludedFiles": []}
+        # Fails with BrokenBarrierError unless all three batches are in flight at once.
+        barrier = threading.Barrier(3, timeout=5)
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "discovery":
+                return discovery
+            barrier.wait()
+            return _catalog(payload["sourceFiles"][0].rsplit("/", 1)[1], "database", "postgres")
+
+        result = run_workflow(
+            object(),
+            {"sourceUrl": SOURCE, "deferPublication": True},
+            "discovery",
+            "generator",
+            "pr_creator",
+            "gpt-4o",
+            generator_batch_size=3,
+            generator_concurrency=3,
+            invoker=invoke,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(3, len(result["catalogs"][0]["catalog"]["localServices"]))
+
+    def test_merge_follows_batch_order_not_completion_order(self):
+        files = [_file(index) for index in range(6)]
+        discovery = {"localDevConfigFiles": files, "excludedFiles": []}
+        second_done = threading.Event()
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "discovery":
+                return discovery
+            if payload["sourceFiles"] == files[0:3]:
+                # The first batch finishes last, but its technology for "Redis" must still win.
+                second_done.wait(timeout=5)
+                return _catalog("Redis", "cache", "redis6")
+            second_done.set()
+            return _catalog("Redis", "cache", "redis7")
+
+        result = run_workflow(
+            object(),
+            {"sourceUrl": SOURCE, "deferPublication": True},
+            "discovery",
+            "generator",
+            "pr_creator",
+            "gpt-4o",
+            generator_batch_size=3,
+            generator_concurrency=2,
+            invoker=invoke,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual("redis6", result["catalogs"][0]["catalog"]["localServices"][0]["technology"])
 
     def test_run_workflow_allows_empty_discovery_result(self):
         calls = []
@@ -214,6 +272,7 @@ class RunWorkflowTests(unittest.TestCase):
             "gpt-4o",
             generator_batch_size=1,
             invoker=invoke,
+            retry_delay_seconds=0,
         )
 
         self.assertFalse(result["success"])

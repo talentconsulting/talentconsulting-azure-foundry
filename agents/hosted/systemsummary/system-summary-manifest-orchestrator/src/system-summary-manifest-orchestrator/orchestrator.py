@@ -14,6 +14,7 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -221,6 +222,7 @@ def run_manifest(
     publisher_name: str,
     model: str,
     max_entries: int = MAX_ENTRIES,
+    workflow_concurrency: int = 4,
     fetch: Callable[[str], Any] = _fetch_json,
     invoker: Callable[..., Any] = invoke_agent,
 ) -> dict[str, Any]:
@@ -231,29 +233,40 @@ def run_manifest(
     if len(manifest) > max_entries:
         raise ManifestError("too_many_entries", f"A run may summarize at most {max_entries} repositories.")
 
-    systems: list[dict[str, Any]] = []
-    failures: list[dict[str, Any]] = []
-    for index, entry in enumerate(manifest):
-        if not isinstance(entry, dict):
-            failures.append(
-                {"repository": f"entry[{index}]", "stage": "manifest_entry", "errorType": "ManifestError", "message": "Manifest entry must be an object."}
-            )
-            continue
+    def summarize(index: int, entry: dict[str, Any]) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
         repository_label = entry.get("github-repo") or f"entry[{index}]"
         try:
             generator_input = build_generator_input(entry, blob, fetch)
             repository_label = generator_input["repository"]
             generated = invoker(project, generator_name, model, generator_input)
-            systems.append(_validate_summary_output(generated, generator_input["repository"]))
+            return _validate_summary_output(generated, generator_input["repository"]), None
         except Exception as error:
+            return None, {
+                "repository": repository_label,
+                "stage": "system_summary",
+                "errorType": type(error).__name__,
+                "message": str(error)[:300],
+            }
+
+    with ThreadPoolExecutor(max_workers=max(1, workflow_concurrency)) as executor:
+        futures = [
+            executor.submit(summarize, index, entry) if isinstance(entry, dict) else None
+            for index, entry in enumerate(manifest)
+        ]
+    # Process results in manifest order so the systems list and failures do not depend on completion order.
+    systems: list[dict[str, Any]] = []
+    failures: list[dict[str, Any]] = []
+    for index, future in enumerate(futures):
+        if future is None:
             failures.append(
-                {
-                    "repository": repository_label,
-                    "stage": "system_summary",
-                    "errorType": type(error).__name__,
-                    "message": str(error)[:300],
-                }
+                {"repository": f"entry[{index}]", "stage": "manifest_entry", "errorType": "ManifestError", "message": "Manifest entry must be an object."}
             )
+            continue
+        system, failure = future.result()
+        if system is not None:
+            systems.append(system)
+        else:
+            failures.append(failure)
 
     if not systems:
         return {

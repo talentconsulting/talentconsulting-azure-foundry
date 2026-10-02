@@ -1,4 +1,5 @@
 import json
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -255,6 +256,85 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(2, result["generatedRepositoryCount"])
         self.assertEqual(2, result["generatedCatalogCount"])
         self.assertEqual(["workflow", "workflow", "publisher"], calls)
+
+    def test_repositories_are_generated_concurrently(self):
+        repos = [eventcatalog_entry(index) for index in range(3)]
+        # Fails with BrokenBarrierError unless all three workflows are in flight at once.
+        barrier = threading.Barrier(3, timeout=5)
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "workflow":
+                barrier.wait()
+                repository = "source/" + payload["sourceUrl"].split("/")[4]
+                return {
+                    "success": True,
+                    "catalogs": [{"sourceUrl": payload["sourceUrl"], "catalog": {**CATALOG, "repository": repository}}],
+                }
+            return {"success": True, "status": "created"}
+
+        result = run_manifest(
+            object(),
+            {"sourceUrl": MANIFEST_URL},
+            "workflow",
+            "publisher",
+            "gpt-4o",
+            workflow_concurrency=3,
+            manifest_loader=lambda blob: repos,
+            commit_resolver=lambda entry: NEW_SHA,
+            invoker=invoke,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(3, result["generatedRepositoryCount"])
+
+    def test_results_are_processed_in_manifest_order_not_completion_order(self):
+        repos = [eventcatalog_entry(index) for index in range(3)]
+        later_done = threading.Event()
+        finished = []
+        published = []
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "workflow":
+                repository = "source/" + payload["sourceUrl"].split("/")[4]
+                if repository == "source/app0":
+                    # The first manifest entry finishes last, but must still be processed first.
+                    later_done.wait(timeout=5)
+                elif repository == "source/app2":
+                    later_done.set()
+                finished.append(repository)
+                return {
+                    "success": True,
+                    "catalogs": [{"sourceUrl": payload["sourceUrl"], "catalog": {**CATALOG, "repository": repository}}],
+                }
+            published.append(payload)
+            return {"success": True, "status": "created"}
+
+        result = run_manifest(
+            object(),
+            {"sourceUrl": MANIFEST_URL},
+            "workflow",
+            "publisher",
+            "gpt-4o",
+            workflow_concurrency=3,
+            manifest_loader=lambda blob: repos,
+            commit_resolver=lambda entry: NEW_SHA,
+            invoker=invoke,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertNotEqual("source/app0", finished[0])
+        self.assertEqual(
+            ["app0/event-catalog/events-and-commands.json", "app1/event-catalog/events-and-commands.json", "app2/event-catalog/events-and-commands.json"],
+            [catalog["targetPath"] for catalog in published[0]["catalogs"]],
+        )
+        self.assertEqual(
+            ["source/app0", "source/app1", "source/app2"],
+            [repository["repository"] for repository in result["generatedRepositories"]],
+        )
+        self.assertEqual(
+            [NEW_SHA] * 3,
+            [entry["eventcatalog"]["last-commit-hash-scanned"] for entry in published[0]["manifestFile"]["content"]],
+        )
 
     def test_legacy_db_catalog_node_remains_supported(self):
         legacy = manifest("")

@@ -1,4 +1,5 @@
 import json
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -208,6 +209,67 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(1, len(publisher_calls))
         self.assertEqual(2, len(publisher_calls[0]["catalogs"]))
         self.assertEqual(2, result["generatedCatalogCount"])
+
+    def test_repositories_are_generated_concurrently(self):
+        repos = [local_dev_config_entry(index) for index in range(3)]
+        # Fails with BrokenBarrierError unless all three workflows are in flight at once.
+        barrier = threading.Barrier(3, timeout=5)
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "workflow":
+                barrier.wait()
+                repo = payload["sourceUrl"].split("/")[4]
+                catalog = make_catalog(repository=f"source/{repo}")
+                return {"success": True, "catalogs": [{"sourceUrl": payload["sourceUrl"], "catalog": catalog}]}
+            return {"success": True, "status": "created"}
+
+        result = run_manifest(
+            object(), {"sourceUrl": MANIFEST_URL}, "workflow", "publisher", "gpt-4o",
+            workflow_concurrency=3,
+            manifest_loader=lambda blob: repos, commit_resolver=lambda entry: NEW_SHA, invoker=invoke,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(3, result["generatedRepositoryCount"])
+
+    def test_results_are_processed_in_manifest_order_not_completion_order(self):
+        repos = [local_dev_config_entry(index) for index in range(3)]
+        later_done = threading.Event()
+        finished = []
+        published = []
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "workflow":
+                repo = payload["sourceUrl"].split("/")[4]
+                if repo == "app0":
+                    # The first repository finishes last, but must still be processed first.
+                    later_done.wait(timeout=5)
+                    finished.append(repo)
+                else:
+                    finished.append(repo)
+                    if len(finished) == 2:
+                        later_done.set()
+                catalog = make_catalog(repository=f"source/{repo}")
+                return {"success": True, "catalogs": [{"sourceUrl": payload["sourceUrl"], "catalog": catalog}]}
+            published.append(payload)
+            return {"success": True, "status": "created"}
+
+        result = run_manifest(
+            object(), {"sourceUrl": MANIFEST_URL}, "workflow", "publisher", "gpt-4o",
+            workflow_concurrency=3,
+            manifest_loader=lambda blob: repos, commit_resolver=lambda entry: NEW_SHA, invoker=invoke,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual("app0", finished[-1])
+        self.assertEqual(
+            [f"app{index}/local-dev-config/local-dev-config.json" for index in range(3)],
+            [catalog["targetPath"] for catalog in published[0]["catalogs"]],
+        )
+        self.assertEqual(
+            [f"source/app{index}" for index in range(3)],
+            [repository["repository"] for repository in result["generatedRepositories"]],
+        )
 
     def test_run_manifest_reports_failed_status_when_no_catalog_succeeds(self):
         def invoke(project, name, model, payload, max_attempts=2):

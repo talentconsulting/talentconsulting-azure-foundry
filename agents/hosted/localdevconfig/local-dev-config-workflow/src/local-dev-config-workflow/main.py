@@ -23,6 +23,7 @@ GENERATOR_NAME = os.getenv("LOCAL_DEV_CONFIG_GENERATOR_AGENT_NAME", "local-dev-c
 PR_CREATOR_NAME = os.getenv("LOCAL_DEV_CONFIG_PR_CREATOR_AGENT_NAME", "local-dev-config-pr-creator")
 DISCOVERY_MAX_FILES = int(os.getenv("LOCAL_DEV_CONFIG_DISCOVERY_MAX_FILES", "100"))
 GENERATOR_BATCH_SIZE = int(os.getenv("LOCAL_DEV_CONFIG_GENERATOR_BATCH_SIZE", "5"))
+GENERATOR_CONCURRENCY = int(os.getenv("LOCAL_DEV_CONFIG_GENERATOR_CONCURRENCY", "3"))
 if not PROJECT_ENDPOINT:
     raise EnvironmentError("FOUNDRY_PROJECT_ENDPOINT is required.")
 
@@ -68,6 +69,7 @@ async def handle_create(request: CreateResponse, context: ResponseContext, cance
             PR_CREATOR_NAME,
             MODEL,
             GENERATOR_BATCH_SIZE,
+            GENERATOR_CONCURRENCY,
         )
     except Exception as error:
         logger.exception("Local dev config workflow failed.")

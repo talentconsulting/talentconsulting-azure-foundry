@@ -23,6 +23,7 @@ GENERATOR_NAME = os.getenv("REPO_METADATA_GENERATOR_AGENT_NAME", "repo-metadata-
 PR_CREATOR_NAME = os.getenv("REPO_METADATA_PR_CREATOR_AGENT_NAME", "repo-metadata-pr-creator")
 DISCOVERY_MAX_FILES = int(os.getenv("REPO_METADATA_DISCOVERY_MAX_FILES", "100"))
 GENERATOR_BATCH_SIZE = int(os.getenv("REPO_METADATA_GENERATOR_BATCH_SIZE", "5"))
+GENERATOR_CONCURRENCY = int(os.getenv("REPO_METADATA_GENERATOR_CONCURRENCY", "3"))
 if not PROJECT_ENDPOINT:
     raise EnvironmentError("FOUNDRY_PROJECT_ENDPOINT is required.")
 
@@ -68,6 +69,7 @@ async def handle_create(request: CreateResponse, context: ResponseContext, cance
             PR_CREATOR_NAME,
             MODEL,
             GENERATOR_BATCH_SIZE,
+            GENERATOR_CONCURRENCY,
         )
     except Exception as error:
         logger.exception("repo-metadata workflow failed.")

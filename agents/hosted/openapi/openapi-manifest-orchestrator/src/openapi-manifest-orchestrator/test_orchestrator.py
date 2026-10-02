@@ -1,4 +1,5 @@
 import json
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -210,6 +211,83 @@ class ManifestTests(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertEqual(1, result["generatedRepositoryCount"])
         self.assertEqual(["discovery", "workflow", "publisher"], [call[0] for call in calls])
+
+    def test_repositories_are_generated_concurrently(self):
+        repos = [openapi_entry(index) for index in range(3)]
+        # Fails with BrokenBarrierError unless all three workflows are in flight at once.
+        barrier = threading.Barrier(3, timeout=5)
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "discovery":
+                base = payload["sourceUrl"].replace("/tree/", "/blob/")
+                return [{"apiFile": f"{base}/File.cs", "supportingFiles": []}]
+            if name == "workflow":
+                barrier.wait()
+                return {
+                    "success": True,
+                    "specifications": [{"apiFile": item["apiFile"], "specification": SPEC} for item in payload["apiFiles"]],
+                }
+            return {"success": True, "status": "created"}
+
+        result = run_manifest(
+            object(),
+            {"sourceUrl": MANIFEST_URL},
+            "discovery",
+            "workflow",
+            "publisher",
+            "gpt-4o",
+            workflow_concurrency=3,
+            manifest_loader=lambda blob: repos,
+            commit_resolver=lambda entry: NEW_SHA,
+            invoker=invoke,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(3, result["generatedRepositoryCount"])
+        self.assertEqual([], result["failures"])
+
+    def test_results_are_processed_in_manifest_order_not_completion_order(self):
+        repos = [openapi_entry(index) for index in range(2)]
+        second_done = threading.Event()
+        published = []
+
+        def invoke(project, name, model, payload, max_attempts=2):
+            if name == "discovery":
+                base = payload["sourceUrl"].replace("/tree/", "/blob/")
+                return [{"apiFile": f"{base}/File.cs", "supportingFiles": []}]
+            if name == "workflow":
+                if payload["sourceUrl"].startswith("https://github.com/source/app0/"):
+                    # The first repository finishes last, but it must still take the only spec slot.
+                    self.assertTrue(second_done.wait(timeout=5))
+                else:
+                    second_done.set()
+                return {
+                    "success": True,
+                    "specifications": [{"apiFile": item["apiFile"], "specification": SPEC} for item in payload["apiFiles"]],
+                }
+            published.append(payload)
+            return {"success": True, "status": "created"}
+
+        result = run_manifest(
+            object(),
+            {"sourceUrl": MANIFEST_URL},
+            "discovery",
+            "workflow",
+            "publisher",
+            "gpt-4o",
+            max_specs=1,
+            workflow_concurrency=2,
+            manifest_loader=lambda blob: repos,
+            commit_resolver=lambda entry: NEW_SHA,
+            invoker=invoke,
+        )
+
+        self.assertEqual(["source/app0"], [item["repository"] for item in result["generatedRepositories"]])
+        self.assertEqual(["source/app1"], [item["repository"] for item in result["failures"]])
+        self.assertEqual("ManifestError", result["failures"][0]["errorType"])
+        manifest_content = published[0]["manifestFile"]["content"]
+        self.assertEqual(NEW_SHA, manifest_content[0]["specs"]["last-commit-hash-scanned"])
+        self.assertEqual("", manifest_content[1]["specs"]["last-commit-hash-scanned"])
 
     def test_a_partial_generation_failure_still_publishes_the_successful_specs(self):
         def invoke(project, name, model, payload, max_attempts=2):

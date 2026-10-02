@@ -22,6 +22,7 @@ WORKFLOW_NAME = os.getenv("REPO_METADATA_WORKFLOW_AGENT_NAME", "repo-metadata-wo
 PUBLISHER_NAME = os.getenv("REPO_METADATA_PR_CREATOR_AGENT_NAME", "repo-metadata-pr-creator")
 MAX_ENTRIES = int(os.getenv("REPO_METADATA_MANIFEST_MAX_ENTRIES", "100"))
 MAX_CATALOGS = int(os.getenv("REPO_METADATA_MANIFEST_MAX_CATALOGS", "100"))
+WORKFLOW_CONCURRENCY = int(os.getenv("REPO_METADATA_MANIFEST_WORKFLOW_CONCURRENCY", "4"))
 if not PROJECT_ENDPOINT:
     raise EnvironmentError("FOUNDRY_PROJECT_ENDPOINT is required.")
 
@@ -60,7 +61,15 @@ async def handle_create(request: CreateResponse, context: ResponseContext, cance
         payload = parse_request(await context.get_input_text() or "")
         source_url = payload["sourceUrl"]
         result = await asyncio.to_thread(
-            run_manifest, project_client, payload, WORKFLOW_NAME, PUBLISHER_NAME, MODEL, MAX_ENTRIES, MAX_CATALOGS
+            run_manifest,
+            project_client,
+            payload,
+            WORKFLOW_NAME,
+            PUBLISHER_NAME,
+            MODEL,
+            MAX_ENTRIES,
+            MAX_CATALOGS,
+            WORKFLOW_CONCURRENCY,
         )
     except Exception as error:
         logger.exception("Manifest-driven repo-metadata orchestration failed.")

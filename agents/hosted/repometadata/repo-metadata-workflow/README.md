@@ -2,7 +2,7 @@
 
 Hosted Foundry agent that coordinates .NET version discovery, generation, and optional publication for one repository.
 
-For manifest runs, `deferPublication` is `true`: the workflow calls `repo-metadata-source-discovery`, passes its validated file bundle to `repo-metadata-generator` in batches, merges the resulting catalogs, and returns the merged catalog to the manifest orchestrator. The manifest orchestrator aggregates all successful repositories and calls the PR creator once.
+For manifest runs, `deferPublication` is `true`: the workflow calls `repo-metadata-source-discovery`, passes its validated file bundle to `repo-metadata-generator` in batches of `REPO_METADATA_GENERATOR_BATCH_SIZE` (default 5), up to `REPO_METADATA_GENERATOR_CONCURRENCY` batches at once (default 3); each failed batch is retried with exponential backoff, and batches are merged in file order regardless of completion order. The merged catalog is returned to the manifest orchestrator. The manifest orchestrator aggregates all successful repositories and calls the PR creator once.
 
 ## Input
 

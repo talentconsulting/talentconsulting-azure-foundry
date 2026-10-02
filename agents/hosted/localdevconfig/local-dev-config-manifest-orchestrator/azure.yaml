@@ -30,6 +30,8 @@ services:
         value: ${LOCAL_DEV_CONFIG_MANIFEST_MAX_ENTRIES}
       - name: LOCAL_DEV_CONFIG_MANIFEST_MAX_CATALOGS
         value: ${LOCAL_DEV_CONFIG_MANIFEST_MAX_CATALOGS}
+      - name: LOCAL_DEV_CONFIG_MANIFEST_WORKFLOW_CONCURRENCY
+        value: ${LOCAL_DEV_CONFIG_MANIFEST_WORKFLOW_CONCURRENCY}
       - name: GITHUB_READ_TOKEN
         value: ${{connections.openapi-pr-github.credentials.github_token}}
     kind: hosted

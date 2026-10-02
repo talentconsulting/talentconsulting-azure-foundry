@@ -5,7 +5,9 @@ from __future__ import annotations
 import copy
 import json
 import re
+import time
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable
 
 
@@ -237,9 +239,21 @@ def merge_catalogs(catalogs: list[dict[str, Any]]) -> tuple[dict[str, Any], list
     return result, warnings
 
 
-def _generate_batch(project: Any, generator_name: str, model: str, source_url: str, batch: list[str], invoker: Callable[..., Any]) -> dict[str, Any]:
+def _generate_batch(
+    project: Any,
+    generator_name: str,
+    model: str,
+    source_url: str,
+    batch: list[str],
+    invoker: Callable[..., Any],
+    max_attempts: int = 3,
+    retry_delay_seconds: float = 5.0,
+) -> dict[str, Any]:
     last_error: Exception | None = None
-    for _ in range(3):
+    for attempt in range(max(1, max_attempts)):
+        if attempt:
+            # Back off before retrying so concurrent batches do not hammer a throttled model deployment.
+            time.sleep(retry_delay_seconds * 2 ** (attempt - 1))
         try:
             return validate_catalog(invoker(project, generator_name, model, {"sourceUrl": source_url, "sourceFiles": batch}, max_attempts=1))
         except Exception as error:
@@ -273,7 +287,9 @@ def run_workflow(
     model: str,
     max_files: int = 100,
     generator_batch_size: int = 10,
+    generator_concurrency: int = 3,
     invoker: Callable[..., Any] = invoke_agent,
+    retry_delay_seconds: float = 5.0,
 ) -> dict[str, Any]:
     request = parse_workflow_request(json.dumps(request))
     source_url = request["sourceUrl"]
@@ -289,10 +305,19 @@ def run_workflow(
             catalog = {"repository": f"{owner}/{repository}", "ref": ref, "path": path, "commands": [], "events": []}
         else:
             batches = [files[index:index + max(1, generator_batch_size)] for index in range(0, len(files), max(1, generator_batch_size))]
+            with ThreadPoolExecutor(max_workers=max(1, generator_concurrency)) as executor:
+                futures = [
+                    executor.submit(
+                        _generate_batch, project, generator_name, model, source_url, batch, invoker,
+                        retry_delay_seconds=retry_delay_seconds,
+                    )
+                    for batch in batches
+                ]
+            # Collect in batch order, not completion order, so merge_catalogs keeps the same first occurrence.
             catalogs = []
-            for batch in batches:
+            for batch, future in zip(batches, futures):
                 try:
-                    catalogs.append(_generate_batch(project, generator_name, model, source_url, batch, invoker))
+                    catalogs.append(future.result())
                 except Exception as error:
                     batch_errors.append({"files": batch, "errorType": type(error).__name__, "message": str(error)[:300]})
             if batch_errors:
