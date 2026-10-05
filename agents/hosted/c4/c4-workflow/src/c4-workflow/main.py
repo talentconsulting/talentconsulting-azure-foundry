@@ -16,12 +16,13 @@ from workflow import WorkflowError, parse_workflow_request, run_workflow
 
 logger = logging.getLogger(__name__)
 PROJECT_ENDPOINT = os.getenv("FOUNDRY_PROJECT_ENDPOINT") or os.getenv("AZURE_AI_PROJECT_ENDPOINT")
-MODEL = os.getenv("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-4o")
-DISCOVERY_NAME = os.getenv("C4_DISCOVERY_AGENT_NAME", "c4-source-discovery")
-GENERATOR_NAME = os.getenv("C4_GENERATOR_AGENT_NAME", "c4-generator")
-PUBLISHER_NAME = os.getenv("C4_PR_CREATOR_AGENT_NAME", "c4-pr-creator")
-MAX_FILES = int(os.getenv("C4_DISCOVERY_MAX_FILES", "150"))
-BATCH_SIZE = int(os.getenv("C4_GENERATOR_BATCH_SIZE", "150"))
+# azure.yaml passes unset azd environment values through as empty strings, so treat empty as unset.
+MODEL = os.getenv("AZURE_AI_MODEL_DEPLOYMENT_NAME") or "gpt-4o"
+DISCOVERY_NAME = os.getenv("C4_DISCOVERY_AGENT_NAME") or "c4-source-discovery"
+GENERATOR_NAME = os.getenv("C4_GENERATOR_AGENT_NAME") or "c4-generator"
+PUBLISHER_NAME = os.getenv("C4_PR_CREATOR_AGENT_NAME") or "c4-pr-creator"
+MAX_FILES = int(os.getenv("C4_DISCOVERY_MAX_FILES") or "150")
+BATCH_SIZE = int(os.getenv("C4_GENERATOR_BATCH_SIZE") or "150")
 if not PROJECT_ENDPOINT:
     raise EnvironmentError("FOUNDRY_PROJECT_ENDPOINT is required.")
 
