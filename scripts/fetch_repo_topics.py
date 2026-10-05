@@ -11,13 +11,13 @@ writes identical files and opens no pull request.
 
 Required environment variables:
     GITHUB_PR_TOKEN     Token with contents + pull-requests write access to the
-                        manifest repository (service-catalogue-data). Also used
+                        manifest repository (talentsuite-atlas). Also used
                         to read topics unless REPO_TOPICS_TOKEN is set.
 
 Optional environment variables:
     REPO_TOPICS_TOKEN   Token with metadata read access to the manifest
                         repositories, for when they are not all public.
-    MANIFEST_SOURCE_URL Defaults to the shared service-catalogue-data manifest.
+    MANIFEST_SOURCE_URL Defaults to the shared talentsuite-atlas manifest.
 """
 
 from __future__ import annotations

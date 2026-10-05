@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       manifest_url:
-        description: "Manifest blob URL, e.g. https://github.com/owner/service-catalogue-data/blob/main/manifest.json"
+        description: "Manifest blob URL, e.g. https://github.com/talentconsulting/talentsuite-atlas/blob/main/manifest.json"
         required: true
         type: string
       flow:

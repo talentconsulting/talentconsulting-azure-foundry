@@ -9,10 +9,10 @@ Required environment variables:
                              (or classic PAT with the security_events scope)
                              to every repository listed in the manifest.
     GITHUB_PR_TOKEN          Token with contents + pull-requests write access
-                             to the manifest repository (service-catalogue-data).
+                             to the manifest repository (talentsuite-atlas).
 
 Optional environment variables:
-    MANIFEST_SOURCE_URL      Defaults to the shared service-catalogue-data manifest.
+    MANIFEST_SOURCE_URL      Defaults to the shared talentsuite-atlas manifest.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-DEFAULT_MANIFEST_SOURCE_URL = "https://github.com/talentconsulting/service-catalogue-data/blob/main/manifest.json"
+DEFAULT_MANIFEST_SOURCE_URL = "https://github.com/talentconsulting/talentsuite-atlas/blob/main/manifest.json"
 API_URL = "https://api.github.com"
 ALERTS_PER_PAGE = 100
 
