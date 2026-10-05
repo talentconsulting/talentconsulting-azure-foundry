@@ -16,7 +16,8 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 
-MAX_SPECIFICATIONS = 100
+# Matches the manifest orchestrator's OPENAPI_MANIFEST_MAX_SPECS default so a full rescan publishes in one PR.
+MAX_SPECIFICATIONS = 300
 MAX_TOTAL_BYTES = 10 * 1024 * 1024
 REPOSITORY_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 BRANCH_PATTERN = re.compile(r"^[A-Za-z0-9._/-]+$")
