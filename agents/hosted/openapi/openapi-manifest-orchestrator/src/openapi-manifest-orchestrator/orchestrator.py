@@ -384,7 +384,7 @@ def run_manifest(
     publisher_name: str,
     model: str,
     max_entries: int = 25,
-    max_specs: int = 100,
+    max_specs: int = 300,
     batch_size: int = 30,
     workflow_concurrency: int = 4,
     manifest_loader: Callable[[GitHubBlob], object] = download_manifest,
