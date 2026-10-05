@@ -10,6 +10,7 @@ repository as one file.
 from __future__ import annotations
 
 import json
+import os
 import re
 import urllib.error
 import urllib.parse
@@ -19,6 +20,10 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 
+# Without a token GitHub allows 60 API requests an hour per IP, which one run (a contents listing
+# per repository) exhausts; with one it is 5,000. Same connection the other orchestrators use to
+# read the catalogue repository.
+GITHUB_TOKEN = os.getenv("GITHUB_READ_TOKEN")
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_ENTRIES = 50
 OPENAPI_SUFFIX = ".openapi.json"
@@ -83,9 +88,10 @@ def parse_blob_url(value: str) -> GitHubBlob:
 
 def _fetch_json(url: str) -> Any | None:
     """Fetch and parse JSON from url. Returns None on a 404 (the file or directory does not exist)."""
-    request = urllib.request.Request(
-        url, headers={"User-Agent": "system-summary-manifest-orchestrator", "Accept": "application/vnd.github+json"}
-    )
+    headers = {"User-Agent": "system-summary-manifest-orchestrator", "Accept": "application/vnd.github+json"}
+    if GITHUB_TOKEN:
+        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+    request = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             body = response.read(MAX_RESPONSE_BYTES + 1)
