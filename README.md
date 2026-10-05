@@ -4,11 +4,11 @@ This repository contains Azure AI Foundry hosted agents for manifest-driven sour
 
 ## Pattern
 
-Every pipeline in this repository follows the same shape: an orchestrator fetches the manifest from `service-catalogue-data`, then for each manifest entry a discovery agent retrieves the relevant files from the repository being analyzed and a generator agent turns them into structured artifacts, looping until every entry has been processed. Once the loop completes, one PR-creator agent commits every generated artifact back into `service-catalogue-data` in a single pull request.
+Every pipeline in this repository follows the same shape: an orchestrator fetches the manifest from `talentsuite-atlas`, then for each manifest entry a discovery agent retrieves the relevant files from the repository being analyzed and a generator agent turns them into structured artifacts, looping until every entry has been processed. Once the loop completes, one PR-creator agent commits every generated artifact back into `talentsuite-atlas` in a single pull request.
 
 ```mermaid
 flowchart TD
-    orchestrator[Orchestrator] -->|FetchManifest| manifestRepo[(service-catalogue-data)]
+    orchestrator[Orchestrator] -->|FetchManifest| manifestRepo[(talentsuite-atlas)]
     orchestrator --> loop
 
     subgraph workflow[Workflow]
@@ -198,7 +198,7 @@ Generated file paths are deterministic and flat. By default, `src/Api/BidsContro
 
 | Input | Required | Notes |
 | --- | --- | --- |
-| `manifest_url` | Yes | Manifest blob URL, e.g. `https://github.com/owner/service-catalogue-data/blob/main/manifest.json`. Its repository and branch become `targetRepository`/`targetBaseBranch`. |
+| `manifest_url` | Yes | Manifest blob URL, e.g. `https://github.com/talentconsulting/talentsuite-atlas/blob/main/manifest.json`. Its repository and branch become `targetRepository`/`targetBaseBranch`. |
 | `github_repo` | Yes | The exact `github-repo` value to match in the manifest, e.g. `https://github.com/owner/application`. |
 | `flows` | No | `all` (default) or a comma-separated subset of `openapi,dbschema,eventcatalog,service-dependency,c4,local-dev-config,repo-metadata`. Only flows actually present on the matched entry ever run. |
 | `defer_publication` | No | When `true`, generates artefacts without opening pull requests. |

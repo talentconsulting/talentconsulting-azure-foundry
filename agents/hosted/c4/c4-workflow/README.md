@@ -3,7 +3,7 @@
 Coordinates deterministic source discovery, model-backed C4 generation, validation, and optional pull-request publication for one repository path. Publication writes editable draw.io context and container diagrams plus canonical C4 JSON.
 
 ```json
-{"sourceUrl":"https://github.com/owner/repository/tree/main/src","targetRepository":"owner/service-catalogue-data"}
+{"sourceUrl":"https://github.com/owner/repository/tree/main/src","targetRepository":"talentconsulting/talentsuite-atlas"}
 ```
 
 Set `deferPublication` to `true` when called by the manifest orchestrator.
