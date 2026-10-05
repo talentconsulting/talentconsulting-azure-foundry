@@ -2,6 +2,9 @@ name: Check Dependabot Alerts
 
 on:
   workflow_dispatch: {}
+  # Weekly refresh of each manifest repository's open Dependabot alerts.
+  schedule:
+    - cron: "0 6 * * 1"
 
 permissions:
   contents: read

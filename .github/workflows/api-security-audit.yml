@@ -1,0 +1,66 @@
+name: API Security Audit
+
+# Lints every generated OpenAPI spec in the catalogue repository against the OWASP API
+# Security Top 10 and opens one pull request there with a report per repository.
+on:
+  schedule:
+    - cron: "0 7 * * 1" # Weekly, Monday 07:00 UTC; re-checks specs against ruleset updates
+  workflow_dispatch:
+    inputs:
+      catalogue_repository:
+        description: "Catalogue repository holding manifest.json and the generated specs"
+        required: false
+        default: talentconsulting/talentsuite-atlas
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    env:
+      CATALOGUE_REPOSITORY: ${{ inputs.catalogue_repository || 'talentconsulting/talentsuite-atlas' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out the catalogue repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.CATALOGUE_REPOSITORY }}
+          token: ${{ secrets.SERVICE_CATALOGUE_PR_TOKEN }}
+          path: catalogue
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run OWASP API security audit
+        id: audit
+        working-directory: catalogue
+        env:
+          SUMMARY_FILE: ${{ runner.temp }}/api-security-summary.md
+        run: node "$GITHUB_WORKSPACE/scripts/api-security/generate-api-security-report.mjs"
+
+      - name: Set branch suffix
+        id: suffix
+        run: echo "value=$(date -u +%Y%m%d-%H%M%S)-$(echo "$GITHUB_SHA" | cut -c1-8)" >> "$GITHUB_OUTPUT"
+
+      - name: Open pull request in the catalogue repository
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.SERVICE_CATALOGUE_PR_TOKEN }}
+          path: catalogue
+          add-paths: |
+            */api-security-audit/report.json
+          commit-message: Update API security audit
+          title: Update API security audit
+          body-path: ${{ runner.temp }}/api-security-summary.md
+          branch: api-security-audit/${{ steps.suffix.outputs.value }}
+
+      # Findings are the audit's output, not a failure of this job, so report them instead of failing.
+      - name: Summarise findings
+        if: always() && steps.audit.outcome == 'success'
+        run: |
+          echo "OWASP audit: ${{ steps.audit.outputs.errors }} error-level and ${{ steps.audit.outputs.warnings }} warning-level finding(s)." >> "$GITHUB_STEP_SUMMARY"
+          cat "${{ runner.temp }}/api-security-summary.md" >> "$GITHUB_STEP_SUMMARY"
